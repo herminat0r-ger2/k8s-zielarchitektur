@@ -2,6 +2,13 @@
 
 Interaktives HTML-Diagramm der Zielarchitektur für eine KRITIS-Umgebung auf HPE Gen10 ESXi-Basis, Migration weg von VMware.
 
+## 🌐 Live-Ansicht (gerendert im Browser)
+
+**https://herminat0r-ger2.github.io/k8s-zielarchitektur/**
+
+> Hinweis: Die Datei `index.html` im Repo wird von GitHub als Quellcode angezeigt.
+> Für die gerenderte Diagramm-Ansicht immer den Live-Link oben verwenden (GitHub Pages).
+
 ## Inhalt
 
 - **Zwei Standorte (Aktiv/Passiv & Aktiv/Aktiv)** — umschaltbar per Toggle im Diagramm
