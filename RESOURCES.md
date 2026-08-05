@@ -195,10 +195,22 @@ Kurzreferenz — vollständige Liste: https://github.com/philippemerle/Awesome-K
 
 ---
 
-## 8. Offene Entscheidungen / nächste Schritte
+## 8. Entscheidungen & nächste Schritte
 
-1. **Latenzmessung DC A ↔ DC B** (Voraussetzung für jede Storage- und ClusterMesh-Entscheidung): >3 ms → Stretch-Ceph streichen, RBD-Mirroring/Patroni nutzen
-2. **Talos vs RKE2**: Team-Fähigkeiten vs Security-Gewinn abwägen; FIPS-Anforderung prüfen (RKE2 hat FIPS-Mode, Talos nicht offiziell)
-3. **CIDR-Plan fixieren** (Pod/Service je Cluster) — Voraussetzung für ClusterMesh, später nicht änderbar
-4. **CAPI + CAPMOX** im Test-Cluster validieren (Welle 0)
-5. **BSI APP.4.4** als Design-Vorgabe in ISMS aufnehmen (nicht erst zur Zertifizierung)
+### ✅ Getroffene Entscheidungen (2026-08-05)
+1. **Latenz DC A ↔ DC B: gemessen <3 ms** — Stretch-Ceph wäre technisch möglich
+2. **Storage: ROBUSTER Weg gewählt** — Ceph pro DC (getrennte Cluster) + Replikation auf Applikationsebene (Patroni/RBD-Mirroring). Kein Stretch-Cluster trotz niedriger Latenz. Begründung: KRITIS will Ausfallsicherheit ohne Single-Cluster-Abhängigkeit über beide Standorte; ein Software-/Nutzerfehler in einem Stretch-Cluster betrifft beide DCs ("single cluster across all sites = data damaged everywhere")
+3. **Distribution: RKE2** — Team-Nähe zum SUSE/Rancher-Ökosystem, FIPS-Mode vorhanden (Talos hat keinen offiziellen FIPS-Mode)
+4. **BSI APP.4.4 + SYS.1.6** als Design-Vorgabe in ISMS aufgenommen ✅
+
+### ⏳ Offen
+
+**CIDR-Plan fixieren** (Voraussetzung für ClusterMesh, später nicht änderbar ohne Rebuild)
+- Benötigt: bestehende IP-Planung des Unternehmens (belegte 10.x/172.x-Netze, ACI-EPGs), Anzahl Cluster (Prod A/B, Test, Quality = min. 4), Cluster-IDs für ClusterMesh (1–255)
+- Je Cluster: eindeutige Pod-CIDR + Service-CIDR (nicht überlappend!), LoadBalancer-Pool (MetalLB)
+- IPv4-Plan reicht; IPv6 optional später
+
+**CAPI + Proxmox validieren (Welle 0)**
+- RKE2-Pfad = **Rancher Turtles + caprke2 + CAPMOX** (dokumentierter Stack, danquack.dev-Guide)
+- Alternativen: ionos-cloud/CAPMOX (Talos-fokussiert) vs k8s-proxmox/CAPPX (Kubeadm-fokussiert)
+- Benötigt: Test-Proxmox-Cluster, Rancher-Setup (Prime oder Community), Entscheidung Management-Ebene (Rancher vs reines CAPI)
