@@ -243,8 +243,8 @@
         <!-- Ceph async Replikation zwischen den getrennten Clustern A ↔ B -->
         <line x1="650" y1="560" x2="748" y2="560" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
         <line x1="750" y1="576" x2="652" y2="576" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
-        <rect x="652" y="543" width="96" height="50" rx="6" fill="#0f172a" stroke="none"/>
-        <rect x="652" y="543" width="96" height="50" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <rect x="652" y="543" width="96" height="70" rx="6" fill="#0f172a" stroke="none"/>
+        <rect x="652" y="543" width="96" height="70" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
         <text x="700" y="559" fill="#a78bfa" font-size="8" text-anchor="middle">async</text>
         <text x="700" y="573" fill="#a78bfa" font-size="8" text-anchor="middle">Replikation</text>
         <text x="700" y="589" fill="#94a3b8" font-size="7" text-anchor="middle">Patroni /</text>
@@ -375,11 +375,6 @@
         <text x="685" y="720" fill="#a78bfa" font-size="8" text-anchor="middle">Metro-VMs auf SAN (HPE Alletra, Peer Persistence) — RBD ist NICHT multi-writer-fähig, FCI/RAC brauchen Shared Storage</text>
         <text x="685" y="738" fill="#fb7185" font-size="8" text-anchor="middle">Kein gestrecktes etcd — diese Workloads laufen auf VM-Ebene, nicht in Kubernetes</text>
 
-        <!-- ============ RAHMEN: LOKALER STORAGE (Ceph je Datacenter) ============ -->
-        <rect x="40" y="478" width="1320" height="170" rx="12" fill="transparent" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6,4"/>
-        <rect x="330" y="462" width="710" height="20" fill="#0f172a"/>
-        <text x="685" y="476" fill="#a78bfa" font-size="10" font-weight="600" text-anchor="middle">Lokaler Storage — Ceph je Datacenter (KEIN Metro, keine Standort-übergreifende Replikation)</text>
-
         <!-- ============ CEPH — getrennte Cluster je Datacenter (KEIN Metro-Speicher) ============ -->
 
         <!-- Ceph-Cluster A (lokal in Datacenter A) -->
@@ -505,14 +500,14 @@
         <text x="715" y="1402" fill="#94a3b8" font-size="9">  = Quorum JE Datacenter — getrennte Cluster (KEIN Stretch über</text>
         <text x="715" y="1418" fill="#94a3b8" font-size="9">  2 DCs: 3 Replicas über 2 DCs tragen keinen Standortausfall,</text>
         <text x="715" y="1434" fill="#94a3b8" font-size="9">  3 Monitore 2+1 = Quorumverlust bei Ausfall der 2er-Seite)</text>
-        <text x="715" y="1450" fill="#94a3b8" font-size="9">• Rook-Ceph NUR nötig, wenn Ceph getrennt NUR für Kubernetes</text>
-        <text x="715" y="1466" fill="#94a3b8" font-size="9">  betrieben wird — sonst Ceph CSI direkt aufs Proxmox-Ceph</text>
-        <text x="715" y="1482" fill="#94a3b8" font-size="9">• Server-Speicher: 2× NVMe (Non-Volatile Memory Express,</text>
-        <text x="715" y="1498" fill="#94a3b8" font-size="9">  Betriebssystem, RAID1) + NVMe/SSD als OSD · 25-Gigabit-Ethernet+</text>
-        <text x="715" y="1514" fill="#94a3b8" font-size="9">• etcd: lokale NVMe der Control-Plane-Nodes — NIE auf Ceph</text>
-        <text x="715" y="1530" fill="#94a3b8" font-size="9">• Storage Area Network (SAN, z.B. HPE Alletra): nur noch für</text>
-        <text x="715" y="1546" fill="#94a3b8" font-size="9">  Metro-VMs (FCI/RAC, Shared-Storage-Pflicht) — RBD single-writer</text>
-        <text x="715" y="1562" fill="#94a3b8" font-size="9">• Ceph ersetzt das SAN für alle anderen Workloads</text>
+        <text x="715" y="1450" fill="#94a3b8" font-size="9">• Rook-Ceph NUR bei getrenntem Ceph für Kubernetes — sonst Ceph CSI direkt aufs Proxmox-Ceph</text>
+        <text x="715" y="1466" fill="#94a3b8" font-size="9">• Server: 2× NVMe (OS, RAID1) + NVMe/SSD als OSD · 25-Gigabit-Ethernet+</text>
+        <text x="715" y="1482" fill="#94a3b8" font-size="9">• etcd: lokale NVMe der Control-Plane-Nodes — NIE auf Ceph</text>
+        <text x="715" y="1498" fill="#94a3b8" font-size="9">• Storage Area Network (SAN, z.B. HPE Alletra): nur noch für</text>
+        <text x="715" y="1514" fill="#94a3b8" font-size="9">  Metro-VMs (FCI/RAC, Shared-Storage-Pflicht) — RBD single-writer</text>
+        <text x="715" y="1530" fill="#94a3b8" font-size="9">• Ceph ersetzt das SAN für alle anderen Workloads</text>
+        <text x="715" y="1546" fill="#94a3b8" font-size="9">• Patroni: PostgreSQL-HA — Failover + async Replikation in den DR-Standort</text>
+        <text x="715" y="1562" fill="#94a3b8" font-size="9">• RBD-Mirror: Ceph-eigenes async Spiegeln von RBD-Images zwischen den Clustern</text>
 
         <!-- Datenhaltung -->
         <rect x="50" y="1595" width="625" height="235" rx="8" fill="#0f172a"/>
