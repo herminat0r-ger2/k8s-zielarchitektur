@@ -15,6 +15,7 @@ Interaktives HTML-Diagramm der Zielarchitektur für eine KRITIS-Umgebung auf HPE
 - **Layer-Modell**: Proxmox VE (VM-Plattform) · RKE2/Talos Kubernetes · Cilium Overlay · Ceph Storage · DR via Velero/Patroni
 - **Umgebungen**: Produktiv / Test / Quality als getrennte Cluster
 - **Offene Entscheidungen** direkt im Diagramm dokumentiert
+- **[backup/](backup/)** — Backup-Architektur für die neue Welt: PBS + Uyuni + PVE-Hook (VMs) und Velero/Stash/DB-Operatoren (K8s) inkl. Skripte und Ablauf-Bild
 
 ## Nutzung
 
