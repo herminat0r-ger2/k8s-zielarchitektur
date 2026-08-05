@@ -133,17 +133,31 @@ Ressource**, nicht ein separates Backup-Objekt.
 
 ## 3. Brauche ich DB-Operatoren — oder nicht? (die Entscheidung)
 
-**Nein, sie sind nicht zwingend.** Ein Operator ist eine zusätzliche, selbst
-zu wartende Komponente im Cluster. Er lohnt sich, wenn die DBs HA/Failover
-brauchen (RTO klein) oder wenn viele gleichartige DBs existieren, die alle
-gleich behandelt werden sollen.
+**Vorab die verbindliche Anforderung (gilt für ALLE Daten):** Standort B
+muss **immer sofort übernehmen können** — als Hot Standby oder Active/Active.
+Ein Restore aus dem Backup ist **kein Übernahme-Pfad** (nur Sicherheitsnetz
+gegen Datenverlust/Korruption). Deshalb braucht **jede** Datenbank eine
+**Replikation nach Standort B** — auch eine, die im Normalbetrieb "nur eine
+Instanz ohne HA" ist. Der Unterschied ist nur der Automatisierungsgrad:
+
+| Übernahme | Mechanismus | RTO |
+|---|---|---|
+| automatisch (Hot Standby) | Patroni / DB-Operator (CloudNativePG, Percona, KubeDB) | Sekunden–Minuten |
+| manuell per Runbook | Replica läuft bereits in B, Promotion per Runbook (MySQL Replication, MSSQL AG/Log-Shipping, MongoDB ReplicaSet) | Minuten |
+
+**Backup bleibt trotzdem Pflicht:** Replikation schützt nicht gegen logische
+Fehler (DROP TABLE, Bug, Ransomware) — genau dafür sind Velero/MinIO + PBS da.
+Aber die Übernahme hängt nie vom Restore ab.
+
+**Sind Operatoren nötig?** Nicht zwingend — sie sind der bequemste Weg, die
+Anforderung zu erfüllen:
 
 | Situation | Empfehlung |
 |---|---|
-| Single-Instanz-DB, kein HA gefordert (RTO Stunden) | **Velero + Hooks** oder **Stash** — kein Operator |
-| DB mit HA-Pflicht (RPO klein, automatisches Failover) | **Operator** (CloudNativePG für PostgreSQL) |
+| Single-Instanz-DB, manuelle Promotion in B reicht | **Replica in B + Velero + Hooks/Stash** — kein Operator nötig |
+| Automatisches Failover gefordert (RTO klein) | **Operator** (CloudNativePG für PostgreSQL) |
 | Viele gleichartige DBs (Self-Service) | Operator (eine CRD = eine DB mit Backup+HA) |
-| Bestehende DBs laufen als VMs, nicht in K8s | gar kein K8s-Operator nötig — VM-Ebene via PBS/Uyuni |
+| Bestehende DBs laufen als VMs, nicht in K8s | Replikation auf VM-Ebene (Patroni/DB-eigene Replikation) + PBS |
 
 **Warum manche Architekturen trotzdem Operatoren nutzen:** Der Operator
 entkoppelt den DB-Betrieb vom Cluster-Lebenszyklus. Ohne Operator muss man
@@ -151,9 +165,9 @@ HA (Patroni) und Backups (Hooks/CronJobs) selbst zusammenbauen und pflegen —
 machbar, aber genau die Handarbeit, die bei vielen DBs weh tut.
 
 **Empfehlung für die Zielarchitektur:**
-- PostgreSQL mit HA → CloudNativePG (ein Operator, deckt Prod ab)
-- Einzelinstanzen ohne HA → Velero + Hooks oder Stash (kein Operator)
-- Velero läuft immer (Objekte + PVs aller Workloads, DR-Restore in Standort B)
+- PostgreSQL mit automatischem Failover → CloudNativePG (ein Operator, deckt Prod ab)
+- Single-Instanz-DBs (manuelle Promotion reicht) → Replica in B + Velero + Hooks/Stash
+- Velero läuft immer (Objekte + PVs aller Workloads, Backup-Sicherheitsnetz)
 
 ---
 
@@ -166,14 +180,15 @@ Siehe [ablauf-k8s-db-backup.svg](ablauf-k8s-db-backup.svg):
 3. **CSI-Snapshot** der PVCs (RBD-Snapshots im Ceph) oder Restic-Dateibackup
 4. **Upload** von Objekten + Daten nach **MinIO/S3** (in Standort A, Replikation nach B)
 5. **DB-Operator** (falls vorhanden) macht zusätzlich sein eigenes, konsistentes Backup (Dump + WAL) — unabhängig von Velero
-6. **Restore (DR) — nur im DR-Fall oder bei Restore-Tests:** Velero in Standort B → Objekte + PVs wiederherstellen, DB aus Backup-Modus zurückholen / Operator stellt Cluster + Daten her. **Im Normalbetrieb kommt Standort B nicht über einen gemeinsamen Ceph-Speicher an die Daten** (Ceph ist pro DC getrennt), sondern über die **laufende async Replikation** (Patroni für PostgreSQL, optional RBD-Mirror) — siehe Box im Hauptdiagramm. Der Restore ist das Sicherheitsnetz für alles, was nicht live repliziert wird (z. B. Single-Instanz-DBs ohne HA).
+6. **Übernahme in Standort B (DR) — per Replikation, nicht per Restore:** Hot Standby/Active-Active heißt: Die Workloads laufen in B bereits, die DB-Replica ist da — Übernahme = Promotion + Route-Switch (GSLB), kein Restore. **Velero-Restore ist KEIN Übernahme-Pfad**, sondern das Sicherheitsnetz gegen Datenverlust (DROP, Bug, Ransomware) und für terminierte Restore-Tests. **Im Normalbetrieb kommt Standort B nicht über einen gemeinsamen Ceph-Speicher an die Daten** (Ceph ist pro DC getrennt), sondern über die **laufende async Replikation** (Patroni für PostgreSQL, DB-eigene Replikation für MySQL/MSSQL/MongoDB, optional RBD-Mirror) — siehe Box im Hauptdiagramm.
 
 ## 5. Rollen-Zusammenfassung
 
 | Komponente | Rolle | Pflicht? |
 |---|---|---|
-| Velero | Objekte + PVs, DR-Restore | **ja** |
-| Pre/Post-Hooks oder Stash | DB-Konsistenz für Nicht-HA-DBs | eine davon |
-| DB-Operator (CloudNativePG u. a.) | HA + konsistente Backups + Upgrades | **optional** (bei HA-Pflicht empfohlen) |
+| Replikation nach B (Patroni / DB-eigene) | Hot Standby — sofortige Übernahme ohne Restore | **ja (Pflicht)** |
+| Velero | Objekte + PVs, Backup-Sicherheitsnetz | **ja** |
+| Pre/Post-Hooks oder Stash | DB-Konsistenz (Dumps) für alle DBs | eine davon |
+| DB-Operator (CloudNativePG u. a.) | automatisches Failover + Backups + Upgrades | **optional** (bei RTO klein empfohlen) |
 | MinIO/S3 | Backup-Ziel, Cross-Site-Restore | ja |
 | PBS | VM-Image-Backups (Nodes + DB-VMs) | ja |

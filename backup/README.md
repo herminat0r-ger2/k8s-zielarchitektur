@@ -78,7 +78,9 @@ Ausführlich dokumentiert in **[k8s/README.md](k8s/README.md)** mit Ablauf-Bild 
 
 Kurzfassung:
 
-- **Velero** sichert K8s-Objekte + PV-Inhalte nach MinIO/S3 und kann gezielt in einen anderen Cluster (Standort B) restoren.
+> **Verbindliche Anforderung:** Standort B übernimmt **immer sofort** (Hot Standby / Active-Active). Replikation nach B ist für alle Daten Pflicht; Restore ist nur Sicherheitsnetz gegen Datenverlust, **kein Übernahme-Pfad**. Details: [k8s/README.md](k8s/README.md) Abschnitt 3.
+
+- **Velero** sichert K8s-Objekte + PV-Inhalte nach MinIO/S3 — als Backup-Sicherheitsnetz, nicht als Übernahme-Mechanismus.
 - **DB-Konsistenz** in K8s auf drei Wegen — in aufsteigender Automatisierung:
   1. **Velero + Pre/Post-Hooks** (kein Operator nötig): zentrales Backup definiert Exec-Hooks in die DB-Pods (`pg_dump`-artig oder Backup-Modus). Funktioniert ohne Zusatz-Installation, Hooks sind zentral pro Backup definiert.
   2. **Stash (AppsCode)**: Sidecar-Injektion per Label-Selektor (`backup: database`) — einmalige zentrale `BackupConfiguration`, dann automatisch für alle (auch neue) Pods mit dem Label. Konsistente Dumps für PostgreSQL/MySQL/MongoDB/Redis → S3/MinIO.
@@ -94,9 +96,9 @@ Kurzfassung:
 | HA / automatisches Failover | ❌ selbst bauen (Patroni als extra Deployment) | ✅ eingebaut |
 | Upgrades / Major-Versionen | manuell | ✅ Operator-geführt |
 | Betriebsmodell | transparent, klassisch | deklarativ (CRD), ein Betriebsmodell mehr im Cluster |
-| Wann sinnvoll | Single-Instanz-DBs ohne HA-Pflicht | DBs mit HA-/RPO-Anforderung oder viele gleichartige DBs |
+| Wann sinnvoll | Single-Instanz-DBs, manuelle Promotion in B reicht | DBs mit automatischem Failover oder viele gleichartige DBs |
 
-Empfehlung für die Zielarchitektur: **Single-Instanz-DBs ohne HA → Velero + Hooks (oder Stash). HA-pflichtige DBs → Operator** (CloudNativePG für PostgreSQL). Beides kann parallel laufen; der Operator ersetzt die Hooks für seine DBs, Velero sichert weiterhin Objekte + PVs aller Workloads.
+Empfehlung für die Zielarchitektur: **Single-Instanz-DBs (manuelle Promotion in B reicht) → Replica in B + Velero + Hooks (oder Stash). Automatisches Failover gefordert → Operator** (CloudNativePG für PostgreSQL). Beides kann parallel laufen; der Operator ersetzt die Hooks für seine DBs, Velero sichert weiterhin Objekte + PVs aller Workloads.
 
 ## 5. Verzeichnisstruktur
 
