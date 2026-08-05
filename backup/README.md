@@ -72,36 +72,9 @@ Ablauf eines Backups:
 - Oder im Backup-Job pro VM hinterlegen (Proxmox-GUI: VM → Optionen → Hook-Skript).
 - **Testhinweis:** Die genaue Phasen-Reihenfolge (`pre-start` → QEMU-GA-freeze → Snapshot → `post-stop`) im Zielkontext verifizieren — die Skripte selbst unverändert im Gast testen (siehe `scripts/`).
 
-## 3. VM-Failover (Ersatz für vSphere-Stretched-Cluster)
+## 3. VM-Failover & Split-Brain
 
-**Was ihr heute habt:** vSphere HA startet bei Ausfall von Standort A die VMs auf Hosts in Standort B neu (Restart, nicht Live-Migration). Die Daten sind da, weil der Storage synchron gespiegelt ist. RPO ≈ 0, RTO = Boot + Recovery.
-
-**In der Zielarchitektur** (getrennte Proxmox-/Ceph-Cluster) ist das zweistufig:
-
-| Ebene | Mechanismus | Konfiguration |
-|---|---|---|
-| Node-Failover (Host in A stirbt) | Proxmox HA (`ha-manager`) | Einstellung, kein Skript |
-| Standort-Failover (ganzes DC A down) | RBD-Mirror (Daten in B) + Start der VMs in B | Failover-Skript/Runbook nötig |
-
-### Das Split-Brain-Problem (warum der Witness nötig ist)
-
-Ohne Quorum weiß B nicht, ob A down ist oder nur der Link A–B. Falscher Automatismus: B startet VMs, obwohl A nach außen weiter funktioniert → beide Standorte schreiben → beim Wiederverbinden überschreibt einer den anderen.
-
-**Lokaler Ceph vermeidet nur das Storage-Split-Brain** (kein gemeinsamer Speicherzustand über die DCs; fail-safe: ohne Quorum schreibt nur einer oder keiner). Die **Failover-Entscheidung selbst** (DB-Promotion, VM-Start in B) braucht trotzdem eine unabhängige 3. Instanz — Witness = Quorum = Tie-Breaker, nur auf anderer Ebene (Basti-Korrektur 2026-08).
-
-Drei Regeln:
-1. **Single-Primary:** Nur ein Standort schreibt. B ist Replica (Patroni/DB-eigene Replikation) — "beide schreiben" entsteht gar nicht erst.
-2. **Quorum/Witness:** Automatischer Failover nur mit Bestätigung durch eine 3. Instanz (Witness an Standort C oder extern). A lebt + Link down → kein Failover. A wirklich down → B failovert.
-3. **Fencing bei Rückkehr:** A kommt nach Failover als Replica zurück (DBs: Patroni/DCS macht das automatisch). Legacy-VMs: Spiegel-Richtung umkehren (B → A), sonst überschreibt A den neueren Stand.
-
-### Entscheidung (offen — gehört in die Zielarchitektur)
-
-| Option | Konsequenz |
-|---|---|
-| **Automatisch** → Witness an Standort C (kleine VM) | RTO automatisch; Witness muss ins Diagramm + betrieben werden |
-| **Manuell per Runbook** | kein Witness nötig; RTO = Mensch (Minuten–Stunden) |
-
-Anforderung "B übernimmt sofort" → automatisch → **Witness aufnehmen**.
+→ Siehe **[failover.md](../failover.md)** — Anforderung "Standort B übernimmt sofort", Witness/Down-Detection und Split-Brain-Regeln gehören zur Hauptarchitektur, nicht zum Backup-Konzept.
 
 ## 4. K8s-Ebene: Velero + DB-Konsistenz
 
