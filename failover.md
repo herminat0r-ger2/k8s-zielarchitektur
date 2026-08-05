@@ -66,7 +66,8 @@ Anforderung "B übernimmt sofort" → automatisch → **Witness aufnehmen** (Sta
 
 ## 8. Warum KEIN gestreckter Proxmox-Cluster
 
-- 60–80 Hosts sprengen das Proxmox-Cluster-Limit (16–24 Nodes) → mehrere Cluster nötig, ein einzelner gestreckter Cluster kann die Skala nicht abbilden.
+- **Corosync-Latenz über den Metro-Link:** Die offizielle Doku nennt **kein hartes Node-Limit** ("no explicit limit", Praxis 50+ Nodes möglich) — der begrenzende Faktor ist **Corosync-PPS/Latenz**. Ein gestreckter Cluster müsste die Cluster-Kommunikation über den Metro-Link laufen lassen (höhere Latenz als LAN) → Token-Timeout-/Quorum-Risiko, insbesondere bei Link-Flackern.
+- **Skala:** 60–80 Hosts in einem Cluster sind praktisch riskant und unüblich; konservativ plant man 16–24 Nodes je Cluster → mehrere Cluster pro DC.
 - Ohne gestrecktes Ceph bringt ein gestreckter Proxmox-Cluster nichts (VM-Disks nicht in B) — und gestrecktes Ceph = Metro-Probleme (Split-Brain im Storage, Tie-Breaker, Blast-Radius, RBD single-writer).
 - Fencing bei Link-Flackern ist ein echtes Risiko (ein Standort killt den anderen bei kurzem Aussetzer).
 - Blast-Radius: Ein Konfigurationsfehler/Bug betrifft beide Standorte gleichzeitig.
