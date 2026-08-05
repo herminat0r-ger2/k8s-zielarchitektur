@@ -72,7 +72,38 @@ Ablauf eines Backups:
 - Oder im Backup-Job pro VM hinterlegen (Proxmox-GUI: VM → Optionen → Hook-Skript).
 - **Testhinweis:** Die genaue Phasen-Reihenfolge (`pre-start` → QEMU-GA-freeze → Snapshot → `post-stop`) im Zielkontext verifizieren — die Skripte selbst unverändert im Gast testen (siehe `scripts/`).
 
-## 3. K8s-Ebene: Velero + DB-Konsistenz
+## 3. VM-Failover (Ersatz für vSphere-Stretched-Cluster)
+
+**Was ihr heute habt:** vSphere HA startet bei Ausfall von Standort A die VMs auf Hosts in Standort B neu (Restart, nicht Live-Migration). Die Daten sind da, weil der Storage synchron gespiegelt ist. RPO ≈ 0, RTO = Boot + Recovery.
+
+**In der Zielarchitektur** (getrennte Proxmox-/Ceph-Cluster) ist das zweistufig:
+
+| Ebene | Mechanismus | Konfiguration |
+|---|---|---|
+| Node-Failover (Host in A stirbt) | Proxmox HA (`ha-manager`) | Einstellung, kein Skript |
+| Standort-Failover (ganzes DC A down) | RBD-Mirror (Daten in B) + Start der VMs in B | Failover-Skript/Runbook nötig |
+
+### Das Split-Brain-Problem (warum der Witness nötig ist)
+
+Ohne Quorum weiß B nicht, ob A down ist oder nur der Link A–B. Falscher Automatismus: B startet VMs, obwohl A nach außen weiter funktioniert → beide Standorte schreiben → beim Wiederverbinden überschreibt einer den anderen.
+
+**Lokaler Ceph vermeidet nur das Storage-Split-Brain** (kein gemeinsamer Speicherzustand über die DCs; fail-safe: ohne Quorum schreibt nur einer oder keiner). Die **Failover-Entscheidung selbst** (DB-Promotion, VM-Start in B) braucht trotzdem eine unabhängige 3. Instanz — Witness = Quorum = Tie-Breaker, nur auf anderer Ebene (Basti-Korrektur 2026-08).
+
+Drei Regeln:
+1. **Single-Primary:** Nur ein Standort schreibt. B ist Replica (Patroni/DB-eigene Replikation) — "beide schreiben" entsteht gar nicht erst.
+2. **Quorum/Witness:** Automatischer Failover nur mit Bestätigung durch eine 3. Instanz (Witness an Standort C oder extern). A lebt + Link down → kein Failover. A wirklich down → B failovert.
+3. **Fencing bei Rückkehr:** A kommt nach Failover als Replica zurück (DBs: Patroni/DCS macht das automatisch). Legacy-VMs: Spiegel-Richtung umkehren (B → A), sonst überschreibt A den neueren Stand.
+
+### Entscheidung (offen — gehört in die Zielarchitektur)
+
+| Option | Konsequenz |
+|---|---|
+| **Automatisch** → Witness an Standort C (kleine VM) | RTO automatisch; Witness muss ins Diagramm + betrieben werden |
+| **Manuell per Runbook** | kein Witness nötig; RTO = Mensch (Minuten–Stunden) |
+
+Anforderung "B übernimmt sofort" → automatisch → **Witness aufnehmen**.
+
+## 4. K8s-Ebene: Velero + DB-Konsistenz
 
 Ausführlich dokumentiert in **[k8s/README.md](k8s/README.md)** mit Ablauf-Bild ([ablauf-k8s-db-backup.svg](k8s/ablauf-k8s-db-backup.svg)).
 
@@ -86,7 +117,7 @@ Kurzfassung:
   2. **Stash (AppsCode)**: Sidecar-Injektion per Label-Selektor (`backup: database`) — einmalige zentrale `BackupConfiguration`, dann automatisch für alle (auch neue) Pods mit dem Label. Konsistente Dumps für PostgreSQL/MySQL/MongoDB/Redis → S3/MinIO.
   3. **DB-Operatoren** (optional, Empfehlung bei HA-Anforderung): CloudNativePG (PostgreSQL), Percona (MySQL), KubeDB (multi-DB). Der Operator übernimmt HA/Failover/Upgrades **und** konsistente, geplante Backups selbst.
 
-## 4. DB-Operatoren — brauche ich sie oder nicht?
+## 5. DB-Operatoren — brauche ich sie oder nicht?
 
 **Kurz:** Sie sind **optional**. Was sie dir geben: HA + Failover + Upgrades + konsistente Backups als *eine* deklarierte Ressource, statt selbst zu bauen. Was sie kosten: eine zusätzliche, selbst zu wartende Komponente im Cluster.
 
@@ -100,7 +131,7 @@ Kurzfassung:
 
 Empfehlung für die Zielarchitektur: **Single-Instanz-DBs (manuelle Promotion in B reicht) → Replica in B + Velero + Hooks (oder Stash). Automatisches Failover gefordert → Operator** (CloudNativePG für PostgreSQL). Beides kann parallel laufen; der Operator ersetzt die Hooks für seine DBs, Velero sichert weiterhin Objekte + PVs aller Workloads.
 
-## 5. Verzeichnisstruktur
+## 6. Verzeichnisstruktur
 
 ```
 backup/
