@@ -233,11 +233,12 @@
         <!-- Cilium ClusterMesh: Prod-1 ↔ Prod-2 -->
         <line x1="334" y1="360" x2="748" y2="360" stroke="#fb7185" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowrose)"/>
         <line x1="748" y1="375" x2="334" y2="375" stroke="#fb7185" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowrose)"/>
-        <rect x="430" y="343" width="220" height="50" rx="6" fill="#0f172a" stroke="none"/>
-        <rect x="430" y="343" width="220" height="50" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
-        <text x="540" y="363" fill="white" font-size="10" font-weight="600" text-anchor="middle">Cilium ClusterMesh</text>
-        <text x="540" y="380" fill="#fb7185" font-size="8" text-anchor="middle" class="mode-passiv">standortunabhängige Services (DR)</text>
-        <text x="540" y="380" fill="#fb7185" font-size="8" text-anchor="middle" class="mode-aktiv" style="display:none">Lastverteilung über beide Standorte</text>
+        <rect x="430" y="343" width="220" height="62" rx="6" fill="#0f172a" stroke="none"/>
+        <rect x="430" y="343" width="220" height="62" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="540" y="361" fill="white" font-size="10" font-weight="600" text-anchor="middle">ClusterMesh</text>
+        <text x="540" y="377" fill="#fb7185" font-size="8" text-anchor="middle" class="mode-passiv">standortunabhängige Services (DR)</text>
+        <text x="540" y="377" fill="#fb7185" font-size="8" text-anchor="middle" class="mode-aktiv" style="display:none">Lastverteilung über beide Standorte</text>
+        <text x="540" y="393" fill="#94a3b8" font-size="7" text-anchor="middle">erstellt mit Cilium + Hubble (eBPF)</text>
 
         <!-- Ceph async Replikation zwischen den getrennten Clustern A ↔ B -->
         <line x1="650" y1="560" x2="748" y2="560" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
@@ -268,8 +269,6 @@
         <rect x="674" y="90" width="52" height="370" rx="6" fill="rgba(120, 53, 15, 0.2)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,4"/>
         <text x="700" y="360" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">100-Gb/s</text>
         <text x="700" y="374" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">Metro-Link</text>
-        <text x="700" y="440" fill="#94a3b8" font-size="8" text-anchor="middle">Ceph</text>
-        <text x="700" y="452" fill="#94a3b8" font-size="8" text-anchor="middle">Repl.</text>
 
         <!-- Innere Boundary-Kanten im Bereich der übergreifenden Boxen (Legacy-Metro, Ceph) abdecken -->
         <rect x="662" y="660" width="76" height="210" fill="#0f172a"/>
@@ -337,7 +336,6 @@
         <text x="422" y="324" fill="white" font-size="12" font-weight="600" text-anchor="middle">K8s Test</text>
         <text x="422" y="346" fill="#94a3b8" font-size="9" text-anchor="middle">nur Standort A</text>
         <text x="422" y="364" fill="#94a3b8" font-size="8" text-anchor="middle">Dev-Pipeline</text>
-        <text x="422" y="396" fill="#22d3ee" font-size="8" text-anchor="middle">GitOps-managed</text>
 
         <!-- Quality -->
         <rect x="512" y="300" width="140" height="155" rx="8" fill="#0f172a"/>
@@ -457,12 +455,13 @@
         <text x="1145" y="994" fill="#94a3b8" font-size="8" text-anchor="middle">nur signierte Images (Policy)</text>
         <text x="1145" y="1010" fill="#94a3b8" font-size="7" text-anchor="middle">github.com/goharbor/harbor</text>
 
-        <!-- Zeile 2: Netzwerk/Observability (Cilium + Hubble in einer Box, cyan wie Werkzeuge) -->
-        <rect x="50" y="1035" width="1270" height="75" rx="8" fill="#0f172a"/>
-        <rect x="50" y="1035" width="1270" height="75" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <a href="https://cilium.io/" target="_blank"><text x="80" y="1060" fill="white" font-size="12" font-weight="600">Cilium + Hubble ↗</text></a>
-        <text x="80" y="1078" fill="#94a3b8" font-size="8">CNI + NetworkPolicies (eBPF) · ClusterMesh für Multi-Cluster · Hubble: Flow-Logs, Service-Map, Metriken</text>
-        <text x="80" y="1094" fill="#94a3b8" font-size="7">github.com/cilium/cilium · github.com/cilium/hubble · docs.cilium.io</text>
+        <!-- Zeile 2: Cluster-Mesh (Cilium + Hubble, cyan wie Werkzeuge) -->
+        <rect x="50" y="1035" width="1270" height="80" rx="8" fill="#0f172a"/>
+        <rect x="50" y="1035" width="1270" height="80" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <a href="https://cilium.io/" target="_blank"><text x="80" y="1058" fill="white" font-size="12" font-weight="600">Cluster-Mesh ↗</text></a>
+        <text x="80" y="1076" fill="#94a3b8" font-size="8">Cilium: CNI + NetworkPolicies (eBPF) — verbindet die Cluster</text>
+        <text x="80" y="1092" fill="#94a3b8" font-size="8">Hubble: Flow-Logs, Service-Map, Metriken (Observability)</text>
+        <text x="80" y="1106" fill="#94a3b8" font-size="7">github.com/cilium/cilium · github.com/cilium/hubble · docs.cilium.io</text>
 
         <!-- ============ ANSIBLE (außerhalb, für Infrastruktur) ============ -->
         <rect x="300" y="1140" width="770" height="20" fill="#0f172a"/>
