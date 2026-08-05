@@ -166,7 +166,7 @@ Siehe [ablauf-k8s-db-backup.svg](ablauf-k8s-db-backup.svg):
 3. **CSI-Snapshot** der PVCs (RBD-Snapshots im Ceph) oder Restic-Dateibackup
 4. **Upload** von Objekten + Daten nach **MinIO/S3** (in Standort A, Replikation nach B)
 5. **DB-Operator** (falls vorhanden) macht zusätzlich sein eigenes, konsistentes Backup (Dump + WAL) — unabhängig von Velero
-6. **Restore (DR):** Velero in Standort B → Objekte + PVs wiederherstellen, DB aus Backup-Modus zurückholen / Operator stellt Cluster + Daten her
+6. **Restore (DR) — nur im DR-Fall oder bei Restore-Tests:** Velero in Standort B → Objekte + PVs wiederherstellen, DB aus Backup-Modus zurückholen / Operator stellt Cluster + Daten her. **Im Normalbetrieb kommt Standort B nicht über einen gemeinsamen Ceph-Speicher an die Daten** (Ceph ist pro DC getrennt), sondern über die **laufende async Replikation** (Patroni für PostgreSQL, optional RBD-Mirror) — siehe Box im Hauptdiagramm. Der Restore ist das Sicherheitsnetz für alles, was nicht live repliziert wird (z. B. Single-Instanz-DBs ohne HA).
 
 ## 5. Rollen-Zusammenfassung
 
