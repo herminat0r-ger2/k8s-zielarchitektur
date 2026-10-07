@@ -1,0 +1,268 @@
+# Inbetriebnahme-Checkliste: HPE Alletra MP B10000 → Proxmox VE
+
+Run-Book von der Erstinstallation der Arrays bis zur ersten produktiven VM. Ablauf- und
+Entscheidungsgrundlagen stehen in [`storage.md`](storage.md) — dieses Dokument ist die
+Abhakliste dafür.
+
+**Ziel-Topologie** (siehe [`storage.md`](storage.md) §1 und [`index.html`](index.html)):
+drei Proxmox-Cluster — je einer lokal in A und B (standorteigener Storage, kein Sync) und
+**ein gestreckter** Cluster über beide Standorte auf dem Alletra-Metro-Paar.
+
+**Zwei LUN-Klassen auf denselben Arrays** (der rote Faden dieser Checkliste):
+
+| Klasse | Versorgt | Replikation |
+|---|---|---|
+| **lokal-only** | den standorteigenen Proxmox-Cluster A bzw. B | keine — bleibt bei Standortausfall weg |
+| **Metro** | den gestreckten Cluster | Peer Persistence, synchron gespiegelt |
+
+> **Konvention:** `- [ ]` = offener Punkt. `<...>` = umgebungsspezifischer Platzhalter.
+> Befehle stammen aus der HPE-Doku (B10000 CLI-Referenz, RHEL/Oracle- bzw. ESXi-Implementation-Guide)
+> und dem Proxmox VE Admin Guide — am Testsystem verifizieren, bevor sie produktiv laufen.
+
+---
+
+## Phase 0 — Entscheidungen, bevor ein Kabel steckt
+
+- [ ] **Transport je Host festlegen.** Auf der B10000 verfügbar: FC, NVMe-oF/FC, NVMe-oF/TCP, iSCSI. **NVMe/RDMA (RoCE) gibt es nicht.**
+- [ ] ⚠️ **Pro Host genau ein NVMe-oF-Transport:** NVMe/TCP und NVMe/FC können **nicht** auf demselben Host koexistieren (auf dem System/der Array schon).
+- [ ] iSCSI **kann** auf derselben Array neben NVMe/TCP betrieben werden — pro Host aber ebenfalls nicht mischen.
+- [ ] **Port-Budget prüfen:** FC/NVMe/FC bis 12 Ports/Node, Ethernet (iSCSI **oder** NVMe/TCP) nur **0–2 Ports/Node** (modellabhängig). Bei vielen Hosts ist die FC-Seite großzügiger.
+- [ ] **LUN-Klassen-Plan** aufschreiben: welche VM/Cluster-Gruppe nutzt lokal-only, welche Metro? Eigene **CPG je Klasse**.
+- [ ] **Kapazitätsplan** inkl. Overcommit-Faktor: LUN-Größen (logisch) vs. real verfügbare CPG-Kapazität, plus Reserve für Snapshots.
+- [ ] **Netzplan:** Storage-Netz getrennt vom Corosync-Netz (⚠️ *„Storage communication should never be on the same network as corosync"*), MTU-Konzept (Jumbo 9000 oder 1500 — **end-to-end konsistent**), VLANs, Adressen je Array-Node.
+- [ ] **Naming-Konvention** festlegen: CPG, Volumes (`<site>-<klasse>-<zweck>`), Host-Definitionen, Host-Gruppen.
+- [ ] **Firmware-Ziel:** ≥ **10.5.50** (siehe Phase 1).
+
+---
+
+## Phase 1 — Alletra: Basis, Protokolle, Quorum
+
+### 1.1 Firmware & Lizenzen
+
+- [ ] Firmware-/OS-Stand **beider** Arrays prüfen (CLI: `showversion`; sonst Data Ops Manager / SSMC → Systems).
+- [ ] ⚠️ **Ziel ≥ 10.5.50** — behebt das NVMe-Deallocate-Größenlimit (HPE Advisory **a00150116**): ab 10.5.x kündigt die Array max. **32 MB pro Deallocate-Request** an, größere Requests werden abgelehnt und der Platz bleibt *„stranded within the current namespace"* (nutzbar für dieses Volume, **nicht** an andere vergebbar) → schleichend steigende Auslastung.
+- [ ] Lizenz für **Remote Copy / Peer Persistence** vorhanden?
+- [ ] **Quorum Witness (Tie-Breaker)** für das Metro-Paar planen und platzieren — **nicht** auf einem der Cluster-Nodes, sondern an einem dritten Ort.
+
+### 1.2 Ports & Fabrics
+
+- [ ] FC: HBAs/Ports laut Support-Matrix (SPOCK), **Zoning** beidseitig (Single-Initiator/Single-Target), Fabric-Logins sichtbar (`showport`, Switch `zoneshow`).
+- [ ] Ethernet (iSCSI / NVMe/TCP): IPs je Array-Node, **VLAN-Tagging**, Gateway nur wenn nötig.
+- [ ] ⚠️ **MTU 1280–9000** auf der Array — und **identisch** auf Host-NIC, Switch und Array-Port setzen. Halb konfigurierte Jumbo Frames sind die häufigste stille Bremse.
+- [ ] ⚠️ **Auto-Negotiation wird nicht unterstützt** → Switch-Port-**Speed manuell fixieren**, SFP-Speed muss passen.
+- [ ] Optional: **PFC/DCBX** (Ethernet-Pause) für NVMe/TCP aktivieren.
+- [ ] Ab ArcusOS **10.6**: alle 10 Frontend-Ethernet-Ports einzeln als iSCSI **oder** NVMe/TCP konfigurierbar — Port-Aufteilung danach planen.
+
+### 1.3 CPGs & Host-Definitionen
+
+- [ ] **CPG für `lokal-only`** je Standort anlegen (getrennte Kapazität, damit ein vollgelaufener Pool nicht beide Klassen mitnimmt).
+- [ ] **CPG für `Metro`** anlegen (auf beiden Arrays des Paares).
+- [ ] **Host-Definitionen** je Host und **je LUN-Klasse** anlegen:
+  - FC: WWPNs
+  - iSCSI: **IQN** (⚠️ HPE: *„iSCSI presentation model changes to single IQN at array level"*) + CHAP
+  - NVMe/TCP: **NQN**
+- [ ] ⚠️ **Getrennte Host-NQNs/IQNs bzw. Host-Einträge für die lokale und die Metro-Anbindung** — siehe Phase 4.2 (NDSID-Kollision).
+- [ ] **Host-Gruppen/Host-Sets** bilden — je LUN-Klasse eine eigene, damit ein Volume nicht versehentlich beiden Klassen präsentiert wird.
+- [ ] Sichtprüfung: `showhost`, `showhostset`.
+
+---
+
+## Phase 2 — LUNs anlegen (Thin) und präsentieren
+
+Pro Volume/Klasse. Thin ist auf der B10000 der **Default** (`tpvv`); Details in [`storage.md`](storage.md) §2.5.1.
+
+- [ ] **Volume anlegen** (TPVV aus der CPG der jeweiligen Klasse):
+
+  ```bash
+  # Beispiel: 2 TB dünn, Warnung ab 50 %, hartes Limit bei 75 % der virtuellen Größe
+  createvv -tpvv -usr_aw 50 -usr_al 75 <cpg-lokal-a> lokal-a-vmstore 2048g
+  ```
+
+- [ ] **Schwellen bewusst setzen** (`-usr_aw`/`-usr_al`): Überschreitung erzeugt die *Thin Provisioning Soft Threshold Reached* Check Condition — das ist die Frühwarnung, bevor der Pool volläuft.
+- [ ] Optional **Mindest-Allokationsgröße** (`-minalloc`, MB) — verhindert I/O-Verzögerungen durch Volumenwachstum; die Array alloziert dadurch bewusst mehr als gebraucht (`Tot_Rsvd` > `Used`).
+- [ ] Optional **Dedup + Kompression**: `createvv -reduce <cpg> <name> <size>`.
+- [ ] **Präsentieren** an die **richtige Host-Gruppe** (`showvv -host`, `showvlun`).
+- [ ] ⚠️ **Kein Boot from SAN** über diese LUNs (laut HPE nicht unterstützt) → Boot-Volume bleibt lokal.
+
+### 2.1 Metro-Klasse zusätzlich
+
+- [ ] **Peer-Persistence-Paar** bilden: Remote-Copy-Gruppe mit den Metro-Volumes, Modus **synchron**.
+- [ ] **Quorum Witness** der Gruppe zuweisen (aus Phase 1.1).
+- [ ] Zustand prüfen: `showrcopy`, `showrcopy -d` — Gruppe **synchron/aktiv**, kein „stale"/„new" Volume.
+- [ ] ⚠️ Kapazität auf **beiden** Arrays gleich planen — gespiegelte Volumes belegen auf beiden Seiten Platz.
+
+---
+
+## Phase 3 — Proxmox: Cluster und Storage-Netz
+
+### 3.1 Cluster
+
+- [ ] Cluster A, Cluster B und den **gestreckten** Cluster aufsetzen (jeweils eigenes Quorum).
+- [ ] **Corosync-Netz** separat und redundant (idealerweise 2 Links) — niemals auf dem Storage-Netz.
+- [ ] **QDevice** für den gestreckten Cluster installieren (dritte Stimme außerhalb A/B).
+- [ ] ⚠️ Corosync-Timeouts an Node-Zahl und Strecke anpassen (Details: [`failover.md`](failover.md) §8/§9).
+
+### 3.2 Storage-Netz & Multipath
+
+- [ ] Dedizierte Storage-NICs/VLANs, MTU wie in Phase 1.2 (konsistent!), getrennt von Management und Corosync.
+- [ ] **iSCSI-Track:** `iscsid` aktiv; ⚠️ HPE-Empfehlung für Hosts mit **mehreren NICs im selben Subnetz**: `net.ipv4.conf.all.arp_filter=1`.
+- [ ] **NVMe/Track:** Modul laden und Multipath sicherstellen:
+
+  ```bash
+  echo nvme_tcp > /etc/modules-load.d/nvme_tcp.conf   # bei NVMe/FC nicht nötig
+  # nativer Kernel-Multipath (kein multipath-tools):
+  grep -r nvme_core.multipath /etc/default/grub /etc/modprobe.d/   # muss auf Y stehen
+  ```
+
+- [ ] **FC-Track:** HBA-Treiber/Firmware laut SPOCK, Zoning verifiziert.
+
+---
+
+## Phase 4 — Storage in Proxmox einbinden
+
+### 4.1 Track A — NVMe/TCP (oder NVMe/FC)
+
+Proxmox hat **keinen NVMe-oF-Storage-Typ in der GUI** — die Verbindung entsteht per CLI am Host.
+
+```bash
+apt update && apt -y install nvme-cli
+modprobe nvme_tcp
+
+nvme discover -t tcp -a <array-node-ip-1> -s 4420
+nvme connect  -t tcp -n <nqn> -a <array-node-ip-1> -s 4420
+# ... für jeden weiteren Ziel-Port wiederholen (Pfade für Multipath)
+
+nvme list            # -> /dev/nvmeXnY
+nvme list-subsys     # je Pfad "live optimized" erwartet
+nvme list -v         # NQN, NDSID, Controller, Pfad-Zustand
+```
+
+- [ ] **Persistenz über Reboot:** Eintrag in `/etc/nvme/discovery.conf` **+** `systemctl enable --now nvmf-autoconnect.service` (Alternative: `nvme-stas`).
+- [ ] Bei **NVMe/FC** entfällt `nvme connect` — hier genügt HBA-Zoning.
+- [ ] Reboot-Test: nach Neustart sind **alle** Pfade wieder da (`nvme list-subsys`).
+
+### 4.2 ⚠️ Metro-Paar: NDSID/NQN-Prüfung, bevor VMs umziehen
+
+Genau die Kombination aus dieser Checkliste (zwei LUN-Klassen auf aktiv-aktiv gespiegelten Arrays) hat in einem dokumentierten Proxmox-Fall zum Symptom *„IDs don't match for shared namespace"* geführt: Das zum **Master** promotete Array exponiert auch die **nicht** gespiegelten Volumes des Partner-Arrays — mit **dessen** NQN → **identische NDSID, verschiedene NQN** → der Kernel lehnt das Namespace ab, Volumes sind auf einem Host unsichtbar. `nvme disconnect`/`ns-rescan` hilft nicht.
+
+- [ ] **Beide LUN-Klassen gleichzeitig an EINEM Testhost** verbinden.
+- [ ] `nvme list -v` prüfen: kein Volume erscheint zweimal mit unterschiedlicher NQN/gleicher NDSID.
+- [ ] Gegenmaßnahmen vorbereitet: **getrennte Ziel-Ports/Port-Sets**, **getrennte Host-Gruppen**, **getrennte Host-NQNs** je Klasse — oder Klassen protokollarisch trennen (lokal über iSCSI/FC, Metro über NVMe-oF).
+- [ ] Erst nach grüner Prüfung die VMs umziehen.
+
+### 4.3 Track B — iSCSI
+
+```bash
+iscsiadm -m discovery -t sendtargets -p <array-node-ip>:3260
+iscsiadm -m node -l
+iscsiadm -m session
+multipath -ll                      # alle Pfade active/ready
+```
+
+- [ ] **CHAP** konfigurieren (uni- oder bidirektional) und am Array verifizieren: `showiscsisession`, `showiscsisession -d`.
+- [ ] `node.startup` auf `automatic`, damit Sessions den Reboot überstehen.
+- [ ] ⚠️ Multipath braucht bei iSCSI/FC **`dm-multipath`** (Konfiguration HPE-konform, `no_path_retry`, `polling_interval`, `path_checker`), bei NVMe-oF den **nativen Kernel-Multipath**.
+
+---
+
+## Phase 5 — LVM und die Proxmox-Storage-Definition
+
+```bash
+# NUR von EINEM Node aus! (ein geteiltes VG darf nicht mehrfach angelegt werden)
+pvcreate /dev/mapper/<mpath-device>
+vgcreate vg_metro /dev/mapper/<mpath-device>
+```
+
+- [ ] In der PVE-GUI: **Datacenter → Storage → Add → LVM**
+  - „Existing volume groups" → `vg_metro`
+  - **Nodes: alle** Cluster-Nodes auswählen
+  - ⚠️ **„Shared" aktivieren** — sonst ist Live-Migration/HA unmöglich
+  - Content: *Disk image* (Snapshots optional); **keine** ISOs/Templates aufs Block-Storage
+- [ ] ⚠️ **LVM-thin (`lvmthin`) ist als shared Storage nicht unterstützt** (Proxmox Feature-Matrix: *Shared = no*). Für den gestreckten Cluster: **LVM (thick) auf dem Multipath-Device**, Thin kommt aus der **Array** (§2.5.1).
+- [ ] Verifizieren: `pvesm status` zeigt das Storage auf **allen** Nodes als `active`; auf einem Node eine Test-LV anlegen, auf einem anderen sichtbar.
+- [ ] Zweiten Storage-Eintrag für die **lokal-only**-Klasse (`vg_lokal_a`/`_b`) — **ohne** Shared, nur die Nodes des jeweiligen Clusters.
+
+---
+
+## Phase 6 — Ergänzender Storage
+
+- [ ] **ISO / Templates / Snippets**: NFS vom Alletra File-Service **oder** lokales `Directory` — File-Storage erlaubt alle Content-Typen.
+- [ ] **Lokale Pools** (standortgebundene VMs): `zfspool` oder `lvmthin` — ⚠️ **nur lokal**, nicht als shared markieren.
+- [ ] **Proxmox Backup Server (PBS)** als eigenes Backup-Ziel, möglichst an beiden Standorten bzw. mit PBS-Sync; **nicht** auf dem Metro-LUN.
+- [ ] ⚠️ **ZFS gehört nicht auf einen geteilten LUN** — ZFS ist nicht cluster-aware, ein Pool wäre nur von einem Host importierbar (kein HA/Live-Migration). Siehe [`storage.md`](storage.md) §4.4.
+
+---
+
+## Phase 7 — Erste VM (und der Reclaim-Nachweis)
+
+- [ ] VM anlegen, Disk auf dem **shared LVM**-Storage (`vg_metro`).
+- [ ] Controller **virtio-scsi-single** + iothread (Performance), ggf. SSD-Emulation.
+- [ ] ⚠️ **Disk-Option `discard` aktivieren.** Ohne sie wächst das dünne LUN nur noch — der Array-Thin-Vorteil verpufft still. (In der GUI: Disk → *Advanced* → *Discard*.)
+- [ ] **Im Gast** `fstrim.timer` aktiv lassen (systemd) bzw. das Dateisystem mit `discard`-Mountoption — sonst kommt die Kette nie in Gang:
+
+  ```
+  Gast-FS (fstrim/TRIM) → virtio-scsi (discard) → QEMU Discard auf das LV
+     → SCSI: UNMAP  |  NVMe: DSM Deallocate  →  Blöcke zurück in die CPG
+  ```
+
+- [ ] **Reclaim nachweisen** (Vorher/Nachher, ⚠️ **nicht sofort** — HPE: *„space-reclaim and defrag operations … reclaiming space over an interval of time and **not** after receiving the UNMAP command"*):
+
+  ```bash
+  cli% showvv -s <vv>            # Usr Used / %VSize / Tot_Rsvd / Snap  -- vorher
+  # im Gast: große Datei schreiben, löschen, fstrim -av
+  cli% showvv -s <vv>            # nach einigen Intervallen erneut vergleichen
+  ```
+
+- [ ] **Live-Migration** der VM zwischen zwei Nodes testen — der eigentliche Beweis für funktionierenden Shared-Storage.
+- [ ] Erste **Snapshot-Kette** (PVE 9: Volume-Chain) testen und danach Reclaim erneut prüfen.
+
+⚠️ **`Used` ≠ `df -k`** im Gast — Fragmentierung und Inode-Tabelle; die Zahlen werden nie identisch (HPE-Doku).
+
+---
+
+## Phase 8 — Abnahme, Failover, Monitoring, Dokumentation
+
+### 8.1 Failover-Tests
+
+- [ ] **Pfad-Failover**: Storage-Kabel/Port ziehen → `multipath -ll` bzw. `nvme list-subsys` prüfen, I/O läuft ohne Unterbrechung weiter.
+- [ ] **Site-Trennung** des gestreckten Clusters: Quorum-Witness und QDevice müssen entscheiden; laufende VMs dürfen nicht einfrieren.
+- [ ] **Failback** des Metro-Paares testen (Peer Persistence zurück).
+- [ ] **Node-Neustart** mit laufenden VMs auf dem shared Storage (Pfade kommen automatisch wieder).
+
+### 8.2 Monitoring
+
+- [ ] **Array-Seite:** `showvv -s` (Usr Used, %VSize, Tot_Rsvd, Snap-Anteil), **CPG-Auslastung**, Snapshot-Platz, Warn-/Limitschwellen (`-usr_aw`/`-usr_al`).
+- [ ] ⚠️ Die **Proxmox-Belegung sagt nichts über die Pool-Auslastung** — beide Seiten getrennt überwachen.
+- [ ] **Host-Seite:** `pvesm status`, Multipath-/NVMe-Pfadzustand, Storage-Latenz.
+- [ ] Bei NVMe/TCP: Deallocate-Verhalten nach mehreren Laufzeittagen erneut prüfen (Advisory a00150116).
+- [ ] Alarmierung an den **Agenten** (Alert-Queue), nicht als Nachricht an den Nutzer.
+
+### 8.3 Dokumentation
+
+- [ ] Zuordnung **LUN → CPG → Klasse → Cluster** festhalten.
+- [ ] **NQNs / IQNs / WWPNs** je Host und **Port-Sets** dokumentieren.
+- [ ] Multipath-Konfiguration und Discovery-Dateien archivieren (`/etc/multipath.conf`, `/etc/nvme/discovery.conf`).
+- [ ] Firmware-Stände beider Arrays notieren.
+
+---
+
+## Die sechs harten Regeln auf einer Seite
+
+| # | Regel | Konsequenz bei Verstoß |
+|---|---|---|
+| 1 | Pro Host **ein** NVMe-oF-Transport (NVMe/TCP und NVMe/FC nie mischen) | Verbindung nicht unterstützt |
+| 2 | Beide LUN-Klassen auf **getrennten NDSIDs/NQNs** (eigene Port-Sets, Host-NQNs) | *„IDs don't match for shared namespace"* → Volumes unsichtbar |
+| 3 | **`lvmthin` nie als shared** Storage | nicht unterstützt → für den gestreckten Cluster unbrauchbar |
+| 4 | **`discard`-Option** auf jeder VM-Disk + fstrim im Gast | dünne LUNs wachsen nur, Array-Vorteil verpufft |
+| 5 | Firmware **≥ 10.5.50** bei NVMe-Anbindung | Deallocate-Rejects → „stranded" Platz, Auslastung steigt |
+| 6 | Pool-/CPG-Auslastung **getrennt** von Proxmox überwachen | Storage voll → **alle** Gäste bekommen I/O-Fehler, FS-Inkonsistenz möglich |
+
+---
+
+## Quellen
+
+- HPE Alletra Storage MP B10000 — CLI-Referenz (`createvv`, `showvv -s`, `showiscsisession`, `showrcopy`)
+- HPE Alletra Storage MP B10000 — Implementation Guides (RHEL/Oracle Linux, SLES, VMware ESXi)
+- HPE Advisory **a00150116** — Deallocation (Unmap) Issues bei NVMe-Verbindungen, behoben in 10.5.50
+- Proxmox VE Admin Guide — Kapitel 7 *Storage* (Storage Types/Feature-Matrix, Thin Provisioning, Trim/Discard)
+- Projektkontext: [`storage.md`](storage.md), [`failover.md`](failover.md)

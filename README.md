@@ -15,6 +15,7 @@ Interaktives HTML-Diagramm der Zielarchitektur für eine KRITIS-Umgebung auf HPE
 - **Drei Kubernetes-Cluster**: K8s-A, K8s-B, K8s-Stretch · DB-Replikation zwischen A und B via CloudNativePG
 - **[failover.md](failover.md)** — Standort-Failover & Split-Brain: Anforderung "B übernimmt sofort", drei Regeln; **Entscheidung gestreckter Proxmox-Cluster (§8)** und **Corosync-Betriebsauflagen (Latenz-Budget, Timeout-Formel, Link-Prioritäten, QDevice — §9)**
 - **[storage.md](storage.md)** — Proxmox VE Storage-Lösungen (File- & Block-Level): Bewertungsmatrix für das Enterprise-Stretched-Cluster (HPE Alletra + PBS), Empfehlung Block-Storage über NVMe-oF/iSCSI + LVM, Linux-VM-Resilienz bei Netzwerkfehlern
+- **[checkliste-storage.md](checkliste-storage.md)** — Inbetriebnahme-Checkliste Alletra → Proxmox: Protokolle/Ports, CPGs, Thin-LUNs (TPVV), lokale + Metro-Storage-Klasse, NVMe/TCP- und iSCSI-Settings, LVM/Shared-Storage, erste VM inkl. Reclaim-Nachweis, Failover-Tests und Monitoring (81 Punkte in 9 Phasen)
 - **Layer-Modell**: Proxmox VE (VM-Plattform) · RKE2/Talos Kubernetes · Cilium Overlay · **HPE Alletra MP B10000** (zwei LUN-Klassen: lokal-only + Metro) · DR via Velero/CloudNativePG · IaC via OpenTofu, Patches via Uyuni
 - **Umgebungen**: Produktiv / Test / Quality als getrennte Cluster
 - **Offene Entscheidungen** direkt im Diagramm dokumentiert

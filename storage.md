@@ -308,6 +308,8 @@ Ein Proxmox-Forum-Fall (PVE 9.2, **zwei aktiv-aktiv gespiegelte HPE-Alletra-Arra
 
 ---
 
+> **Umsetzung:** Die Abhakliste von der Erstinstallation der Arrays bis zur ersten VM — inklusive Protokoll-/Port-Setup, CPG- und TPVV-Anlage, lokale vs. Metro-LUN-Klasse, NVMe/TCP- und iSCSI-Settings, Shared-LVM, `discard`-Nachweis und Failover-Tests — steht in [`checkliste-storage.md`](checkliste-storage.md).
+
 ## 6. Resilienz-Maßnahmen für Linux-VMs bei Netzwerkfehlern
 
 - Immer Multipath aktivieren und testen (`multipath -ll`).
