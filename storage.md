@@ -148,7 +148,7 @@ Drei Punkte, die dabei überraschen:
 |---|---|
 | NVMe/TCP **kann** mit FC und/oder NVMe/FC **auf dem System** koexistieren | beide Welten auf einer Array möglich |
 | NVMe/TCP **kann NICHT mit NVMe/FC auf demselben Host** koexistieren | pro Host **einen** NVMe-oF-Transport wählen — nicht mischen |
-| NVMe/TCP und iSCSI können auf **derselben** Array koexistieren (zusätzliche Slots) | iSCSI als Zweitprotokoll möglich — pro Host aber nicht mischen |
+| NVMe/TCP und iSCSI können auf **derselben** Array koexistieren (*„due to additional slot support"*) | iSCSI als Zweitprotokoll möglich. Für diese Kombination **auf demselben Host** macht die HPE-Doku **keine Aussage** — in dieser Architektur braucht ihn keiner (siehe Design-Vorlage) |
 | ⚠️ **Port-Personas sind ab Werk gemischt:** 10/25GbE-4-Port-HBA = Port 1+2 **iSCSI**, Port 3+4 **NVMe/TCP**; 100GbE-2-Port-OCP = 2× iSCSI. Ab **10.6** sind alle 10 Frontend-Ethernet-Ports einzeln als iSCSI **oder** NVMe/TCP konfigurierbar (vor 10.6 mit System-Reboot) | die Trennung der LUN-Klassen ist **portscharf** möglich — genau der Hebel für [4.1.2](#412-der-metro-paar-fallstrick) |
 | Max. Sessions pro Array: **3072** (2 Nodes) / **6144** (4 Nodes); **256 pro Port**, von allen VLANs auf dem Port gemeinsam genutzt | Planungsgröße — die früher genannten 2048/4096 sind der **alte** Stand vor der Erhöhung |
 | Ethernet-MTU: **1280–9000 Byte** (Linux-Guide); die ESXi-Anleitung nennt 1500 und 9000 als unterstützte Werte | Jumbo Frames 9000 möglich — end-to-end konsistent setzen |
@@ -171,15 +171,29 @@ Drei Punkte, die dabei überraschen:
 
 **Szenario:** HPE Alletra B10000 + PBS
 
-**Bewertungskriterien:** 1–10, höher = besser, unter Berücksichtigung des Szenarios.
+**Bewertungskriterien:** 1–10, unter Berücksichtigung des Szenarios. **Höher = besser — mit einer Ausnahme: „Komplexität" ist umgekehrt skaliert (niedriger = einfacher/besser).**
+
 **Reihenfolge:** absteigend nach *Gesamt-Eignung im Ziel-Szenario* — nicht nach Performance. Betriebsrisiko und Passung zur geplanten **Doppelnutzung der Arrays** (lokale *und* Metro-LUNs auf denselben Systemen) zählen gleichwertig mit. Wo eine Zeile fehlt (etwa „NVMe-oF/RDMA"), bietet die B10000 sie nicht an — siehe [2.4](#24-nvme-of-im-detail--die-transporte).
+
+**Neu bewertet am 2026-10-07** nach dem Belegdurchgang. Was sich gegenüber der ersten Fassung geändert hat und warum:
+
+| Änderung | Grund |
+|---|---|
+| **Komplexität** war widersprüchlich deklariert | Die Spalte war „höher = besser" überschrieben, die Werte waren aber „niedriger = einfacher" (NFS = 3, ZFS over iSCSI = 8). Die Skalierung ist jetzt explizit benannt |
+| **NVMe-oF/TCP: Komplexität 5 → 7** | kein Proxmox-Storage-Typ (CLI-Anbindung, Persistenz, Diagnose), NQN-Trennung ist Pflicht und Firmware-Gate — **aufwendiger als iSCSI**, nicht einfacher |
+| **NVMe-oF/FC: Gesamt 9,7 → 9,5** | dasselbe Firmware-Gate gilt auch für FC-NVMe (Advisory a00150116), FC-Fabric nötig, ebenfalls kein Proxmox-Storage-Typ |
+| **Snapshots auf LVM: 4–7 → 5–8** | PVE 9 kann Volume-Chain-Snapshots, verlangt aber **thin + discard** im Unterbau (Technologie-Vorschau) — Thin kommt aus der CPG, ist hier also erfüllbar |
+| Firmware-Voraussetzung als **Betriebs-Gate** aufgenommen | Beide NVMe-Transporte brauchen **OS ≥ 10.5.50**, sonst bleiben Deallocate-Blöcke „stranded" (Auslastung steigt schleichend) |
+| **Ethernet-Ports präzisiert** | je Adapter 4 bzw. 2 Ports (ab 10.6 bis 10 einzeln) — der Port-Nachteil ist **kleiner** als zuerst dargestellt, bleibt aber gegenüber den bis zu 12 FC-Ports/Node |
+
+**Ergebnis der Neubewertung:** NVMe/FC, iSCSI+LVM und FC+LVM liegen **gleichauf bei 9,5** — sie sind für dieses Szenario praktisch gleichwertig stark. Entschieden wird nicht über die Punkte, sondern über **Fabric-Vorhandensein und Betriebsrisiko**: NVMe/FC gewinnt bei Performance und Array-Ports, iSCSI bei Einfachheit und Risiko. NVMe/TCP fällt auf 9,2 (mehr Aufwand, Firmware-Gate, NQN-Pflicht).
 
 | Storage-Typ | Shared / Metro geeignet | Snapshots (Proxmox) | Performance | Komplexität | HA / Live-Migration | Resilienz bei Netzfehlern (Linux-VMs) | PBS-Integration | Gesamt-Eignung Enterprise Stretched | Empfehlung für dein Setup |
 |---|---|---|---|---|---|---|---|---|---|
-| **NVMe-oF/FC + LVM** | 10 | 4–7 ¹ | **10** | 6 | 10 | **10** (natives Multipath) | 8 | **9.7** | **Beste Performance** (HBA-Offload, bis 12 Ports/Node) |
-| **iSCSI + LVM (Thick)** | 10 (Alletra nativ) | 4–7 ¹ | 9 | 6 | 10 | **9–10** (Multipath) | 8 | **9.5** | **Primär empfohlen** — robusteste Variante bei zwei LUN-Klassen ⁴ |
-| **FC + LVM** | 10 | 4–7 ¹ | 9.5 | 6 | 10 | **9–10** | 8 | **9.5** | Sehr gut |
-| **NVMe-oF/TCP + LVM** | 10 | 4–7 ¹ | 9.5 | **5** | 10 | **9.5** (natives Multipath) | 8 | **9.4** | Ohne FC-Fabric — Ethernet, mehr Host-CPU, wenige Array-Ethernet-Ports ³ |
+| **NVMe-oF/FC + LVM** | 10 | 5–8 ¹ | **10** | 7 | 10 | **10** (natives Multipath) | 8 | **9.5** | **Beste Performance** (HBA-Offload, bis 12 Ports/Node) — FC-Fabric nötig, FW-Gate ⁵ |
+| **iSCSI + LVM (Thick)** | 10 (Alletra nativ) | 5–8 ¹ | 9 | **5** | 10 | **9–10** (Multipath) | 8 | **9.5** | **Primär empfohlen** — nativ in Proxmox, kein NQN-Risiko, geringste Komplexität ⁴ |
+| **FC + LVM** | 10 | 5–8 ¹ | 9.5 | **5** | 10 | **9–10** | 8 | **9.5** | Sehr gut — ohne NVMe-Komplexität; Boot from SAN/Direct Connect möglich ⁶ |
+| **NVMe-oF/TCP + LVM** | 10 | 5–8 ¹ | 9.5 | **7** | 10 | **9.5** (natives Multipath) | 8 | **9.2** | Ohne FC-Fabric — mehr Aufwand (kein PVE-Typ), FW-Gate ⁵, NQN-Trennung Pflicht ³ ⁴ |
 | **NFS (Alletra File)** | 9 | 6–8 ² | 7–8 | **3** | 9 | 6–7 (weniger robust bei Path-Fail) | 9 | 7.5 | Gut für ISO/Templates |
 | **ZFS over iSCSI** | 9 | **10** | 8 | 8 | 9 | 7–8 | 8 | 7.5 | Möglich, aber komplex |
 | **Ceph RBD** | 8 (eigene Stretch-Mode) | **10** | 8–9 | 8–9 | 10 | 8 (eigene Replikation) | 9 | 7–8 | Nur wenn Hyperconverged |
@@ -192,10 +206,12 @@ Drei Punkte, die dabei überraschen:
 
 **Legende:**
 
-- ¹ Mit neueren Proxmox-Versionen (Volume Chains / qcow2-on-LVM) besser; ansonsten Array-Snapshots (Alletra) nutzen.
+- ¹ Seit Proxmox VE 9 gibt es **Snapshot-as-Volume-Chain** für LVM — laut Doku *„vendor-agnostic support for snapshots on any storage system that supports block storage. This includes iSCSI and Fibre Channel-attached SANs"*. Voraussetzung ist **thin-provisioning *und* discard** im Unterbau (Thin kommt aus der CPG, siehe [2.5](#25-thin-provisioning--auf-welcher-schicht-entsteht-es)); es ist derzeit eine **Technologie-Vorschau** und die Snapshot-Volumes sind **thick** angelegt. Alternativ Array-seitige Snapshots (Alletra).
 - ² qcow2 oder Array-seitige Snapshots.
 - ³ Ethernet-Seite der Array: Ethernet je Adapter **4 Ports** (10/25GbE-4-Port-HBA: ab Werk 2× iSCSI + 2× NVMe/TCP) bzw. **2 Ports** (100GbE-2-Port-OCP: ab Werk 2× iSCSI); ab OS **10.6** bis zu **10 Frontend-Ethernet-Ports** einzeln als iSCSI **oder** NVMe/TCP — also deutlich weniger als die bis zu 12 FC-Ports/Node. Dazu mehr Host-CPU-Last als FC **und** der NQN-Fallstrick bei zwei LUN-Klassen auf denselben Arrays — siehe [4.1.2](#412-der-metro-paar-fallstrick). **NVMe/RDMA (RoCE) bietet die B10000 nicht.**
-- ⁴ **Warum iSCSI (9,5) knapp vor NVMe/TCP (9,4) steht**, obwohl NVMe/TCP die bessere Latenz und nativen Multipath hat: Auf der B10000 teilen sich beide **dieselben Ethernet-Ports der Array** (kein Port-Vorteil zueinander), und der **NQN/NDSID-Fallstrick tritt nur bei NVMe auf** — bei zwei LUN-Klassen auf denselben Arrays ist iSCSI das risikoärmere Protokoll. Wer den Fallstrick sauber löst (getrennte Port-Sets/NQNs, Test nach [4.1.2](#412-der-metro-paar-fallstrick)), fährt mit NVMe/TCP technisch besser. Der Abstand ist bewusst klein — begründete Abwägung, keine Messung.
+- ⁴ **Warum iSCSI (9,5) vor NVMe/TCP (9,2) steht**, obwohl NVMe/TCP die bessere Latenz und nativen Multipath hat: (a) Auf der B10000 teilen sich beide **dieselben Ethernet-Ports der Array** — kein Port-Vorteil zueinander; (b) der **NQN/NDSID-Fallstrick tritt nur bei NVMe auf** — iSCSI kennt das Problem im SCSI-Namespace nicht; (c) **Proxmox hat einen nativen Storage-Typ `iscsi`**, aber **keinen** für NVMe-oF; (d) beide NVMe-Transporte brauchen **Firmware ≥ 10.5.50**. Wer den Fallstrick sauber löst (getrennte Port-Sets/Host-NQNs, Test nach [4.1.2](#412-der-metro-paar-fallstrick)) und die Firmware-Voraussetzung erfüllt, fährt mit NVMe/TCP technisch besser.
+- ⁵ **Firmware-Gate für beide NVMe-Transporte:** HPE Advisory **a00150116** — bis OS 10.5.x ohne Limit gesendete Deallocate-Requests (≥ 2 GB) liefen in **Timeouts**; ab 10.5.x kündigt die Array **max. 32 MB** pro Request an, größere werden **abgelehnt** und der Platz bleibt *„stranded within the current namespace"*. Betroffen sind **FC-NVMe und NVMe/TCP**. **Behoben in 10.5.50** → vor dem Produktivstart prüfen.
+- ⁶ **Über FC unterstützt die B10000 Boot from SAN** (eigene Prozedur) **und Direct Connect** (bestimmte Host-Adapter ab 10.3.0, Punkt-zu-Punkt 16/32 Gbps); über **iSCSI und NVMe/TCP ist beides nicht unterstützt**. Für diese Architektur bleiben die Boot-Volumes lokal — die Option ist ein FC-Vorteil, kein Muss.
 
 ---
 
@@ -205,7 +221,7 @@ Drei Punkte, die dabei überraschen:
 
 - Alletra als Metro-Paar (Peer Persistence) präsentiert denselben LUN an beiden Standorten mit transparentem Failover.
 - **Transport bewusst wählen** — auf der B10000 stehen **NVMe/FC** und **NVMe/TCP**, **kein** NVMe/RDMA ([2.4](#24-nvme-of-im-detail--die-transporte)):
-  - **NVMe/FC** = technisch stärkste Variante (HBA-Offload, bis 12 Ports/Node, etabliertes Zoning) — braucht ein FC-Fabric.
+  - **NVMe/FC** = technisch stärkste Variante (HBA-Offload, bis 12 Ports/Node, etabliertes Zoning) — braucht ein FC-Fabric. ⚠️ Das **Firmware-Gate ≥ 10.5.50** ([3.](#3-bewertungstabelle-enterprise-stretched-cluster) FN ⁵) gilt auch hier, weil es FC-NVMe einschließt.
   - **NVMe/TCP** = nutzt die Ethernet-Infrastruktur, dafür Host-CPU-Last und geteilte Array-Ethernet-Ports (2 bzw. 4 pro Adapter); bei zwei LUN-Klassen auf denselben Arrays ist der NQN-Fallstrick (4.1.2) Pflicht-Prüfpunkt.
   - **iSCSI/FC ohne NVMe** = gleichwertiger Fallback, wenn Kompatibilität wichtiger ist als Latenz.
 - Proxmox: **NVMe-oF** per CLI (`nvme-cli`), **iSCSI** über den Storage-Typ `iscsi` ([4.1.1](#411-einbindung-in-proxmox-ve)) → LVM-Volume-Group auf dem Multipath-Device → als **shared** markieren.
