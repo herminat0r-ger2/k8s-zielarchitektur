@@ -13,6 +13,7 @@
 5. [Empfohlenes Architektur-Setup](#5-empfohlenes-architektur-setup)
 6. [Resilienz-Maßnahmen für Linux-VMs bei Netzwerkfehlern](#6-resilienz-maßnahmen-für-linux-vms-bei-netzwerkfehlern)
 7. [Fazit](#7-fazit)
+8. [Anhang: Begriffe & Grundlagen](#anhang-begriffe--grundlagen)
 
 ---
 
@@ -167,3 +168,66 @@ Mit der HPE Alletra B10000 als Metro-Storage ist **Block-Storage über NVMe-oF o
 - **PBS** als Backup-Schicht ist Pflicht.
 
 > Falls konkrete Konfigurationsbeispiele (`multipath.conf`, LVM-Setup, Alletra Peer Persistence) benötigt werden, können diese ergänzt werden.
+
+---
+
+## Anhang: Begriffe & Grundlagen
+
+Kurz erklärt, was die im Dokument verwendeten Storage- und Cluster-Begriffe technisch bedeuten.
+
+### NVMe-oF (NVMe over Fabrics)
+
+**Was es ist.** NVMe ist das Kommando-Protokoll für SSDs — nicht mehr SCSI, sondern für massiv parallele, latenzarme Zugriffe über PCIe gebaut (viele tiefe Queues statt einer). **NVMe-oF** nimmt genau dieses Protokoll und legt es über ein *Netzwerk* statt über PCIe. Für den Host sieht die entfernte SSD aus wie eine lokale NVMe-Namespace (`/dev/nvmeXnY`).
+
+**Transporte** (der Teil nach dem Schrägstrich):
+
+| Transport | Läuft über | Voraussetzung | Charakter |
+|---|---|---|---|
+| **NVMe/FC** | Fibre-Channel-Fabric | FC-NVMe-fähige HBAs/Ports (Gen 6/7) | Nutzt bestehende SAN-Verkabelung + Zoning, hohe Reife |
+| **NVMe/TCP** | Standard-Ethernet (10/25/40/100 GbE) | keine RDMA-Hardware | Einfachste Einführung; etwas mehr CPU-Overhead und Latenz als RDMA |
+| **NVMe/RDMA** | RoCEv2 (Ethernet) oder InfiniBand | **verlustfreies** Ethernet (PFC/ECN/DCB) | Niedrigste Latenz und CPU-Last, aber saubere QoS-Konfiguration nötig |
+
+**Warum es im Dokument vorne steht.** Gegenüber iSCSI deutlich weniger Latenz und CPU-Overhead (kein SCSI-über-TCP-Stack) — und Multipath ist **im Kernel eingebaut**: wo iSCSI `dm-multipath` braucht, macht NVMe es selbst (`nvme_core.multipath=Y`; `nvme list-subsys` zeigt die Pfade, `nvme list -v` die Namespaces). Im Proxmox-Setup legt man die LVM-Volume-Group wieder auf das Multipath-Device und markiert den Storage als *shared*.
+
+**Grenze.** Multipath ersetzt kein redundantes SAN-Design: es bündelt nur die Pfade, die physisch existieren → siehe Dual-Fabric.
+
+### Dual-Fabric
+
+**Was es ist.** Ein *Fabric* ist das geswitchte Storage-Netz zwischen Hosts und Storage (FC-Switched-Fabric mit Zoning, oder ein dediziertes Ethernet-Netz). **Dual-Fabric** heißt: **zwei physisch und logisch getrennte Fabrics** — Fabric A und Fabric B, jedes mit eigenen Switches und je einem eigenen Host-Port (HBA/NIC).
+
+**Warum getrennt und nicht einfach zwei Links auf denselben Switch.** Ein einzelner Switch ist ein Single Point of Failure: Firmware-Bug, Config-Fehler, Netzteil oder ein Wartungsfenster treffen sonst **alle** Pfade gleichzeitig — und aus "redundant" wird "gleichzeitig weg". Getrennte Fabrics isolieren die Fehlerdomäne: ein Fabric lässt sich warten, während das andere den I/O trägt.
+
+**Zusammenspiel mit Multipath.** Der Host sieht pro Fabric einen Pfad zu denselben LUNs. Die Multipath-Schicht (bei SCSI/FC/iSCSI `dm-multipath`, bei NVMe-oF der native NVMe-Multipath) bündelt sie zu *einem* Gerät und wählt den aktiven Pfad. Fällt ein Fabric komplett aus (Switch, Kabel, HBA), läuft der I/O über das andere weiter — Path-Failover im Bereich 1–2 s.
+
+**Praxis auf Ethernet.** Zwei unabhängige Switch-Stacks (idealerweise unterschiedliche Modelle/Hersteller, damit nicht derselbe Firmware-Bug doppelt auftritt), duale NICs, getrennte VLANs. Bei RoCE zusätzlich **getrennte PFC/DCB-Domänen** — sonst kann ein Pause-Storm in einem Fabric das andere mitreißen.
+
+**Im Stretched Cluster.** Beide Fabrics spannen über beide Standorte. Pro Fabric ist damit der Metro-Link selbst wieder ein gemeinsamer Punkt — deshalb: dual Fabric **und** je Standort redundante Anbindung planen.
+
+### Corosync-Netz
+
+**Was es ist.** Corosync ist die Cluster-Engine unter Proxmox VE (`pvecm`). Sie hält die Cluster-Mitgliedschaft, verteilt die Konfiguration (`pmxcfs`) und führt die Quorum-Abstimmung. Das **Corosync-Netz** ist das dedizierte Netz, über das diese Heartbeats und Votes laufen.
+
+**Eigenschaften (laut Proxmox-Doku):**
+
+- Geringer Bandbreitenbedarf, aber **Latenz und PPS (Pakete/Sekunde) sind der begrenzende Faktor** → ein dediziertes 1-Gbit-NIC genügt, solange es nur Corosync trägt.
+- **UDP-Ports 5405–5412** müssen zwischen allen Nodes offen sein.
+- Seit PVE 6 ist **Kronosnet** der Transport (in `pvecm status` als `Transport: knet` sichtbar) — es erlaubt **bis zu 8 Links**. Ein zweiter Link muss auf einem **anderen physischen Netz** liegen; ein einzelner Link, der nur auf einem Bond hängt, ist in bestimmten Fehlerszenarien problematisch.
+
+**Warum strikt getrennt von Storage und Live-Migration.** Die Doku ist hier unmissverständlich: *"Storage communication should never be on the same network as corosync!"* Corosync reagiert empfindlich auf Latenzspitzen. Ein Speicher-Burst oder eine laufende Migration im selben Netz verzögert die Heartbeats; laufen die Timeouts ab, gilt ein Node als **tot** → HA-Aktion/Fencing, obwohl die Hardware völlig gesund ist. Das ist ein selbstgebauter Ausfall durch geteilte Ressource.
+
+**Bezug zum Stretched Cluster.** Über einen Metro-Link ist die Corosync-Latenz (und PPS) der bestimmende Faktor — **nicht** die Node-Zahl: die Doku nennt kein hartes Limit, in Produktion sind > 50 Nodes dokumentiert. Bei Link-Flackern droht der fälschliche Ausschluss eines Standorts. Genau dieses Argument trägt in [`failover.md`](failover.md) §8 die Entscheidung **gegen** einen gestreckten Proxmox-Cluster.
+
+**Zwei-Node-Konstellation.** Für verlässliches Quorum braucht es eine ungerade Stimmenzahl — bei 2 Nodes übernimmt das der **Corosync-QDevice** (3. Vote). Davon zu unterscheiden ist der **externe Witness** aus `failover.md`: keine Quorum-Stimme *innerhalb* eines Clusters, sondern eine eigenständige externe Instanz mit eigener Check-Logik über die getrennten Cluster.
+
+### Verwandte Begriffe (Kurzform)
+
+| Begriff | Bedeutung |
+|---|---|
+| **Multipath** | Mehrere physische Pfade zu derselben LUN, zu *einem* Gerät gebündelt; ein Pfad fällt aus, I/O läuft weiter |
+| **Path-Failover** | Umschalten des laufenden I/O auf einen anderen Pfad (Ziel: 1–2 s) |
+| **Peer Persistence / Active Peer Persistence** (HPE) | Transparentes Failover zwischen zwei Arrays im Metro-Cluster; *Active* = beide Seiten sind aktiv |
+| **Quorum-Witness / Tie-Breaker** | Unabhängige dritte Instanz, die bei einer Trennung entscheidet, wer weitermachen darf |
+| **Stretched Cluster** | Ein Cluster über zwei Standorte; die Cluster-Kommunikation läuft über den Metro-Link |
+| **Metro-Link** | Die dedizierte Verbindung zwischen den Standorten (Anforderung hier: < 5 ms RTT) |
+| **LUN / Namespace** | Die vom Array präsentierte logische Speichereinheit (SCSI: LUN, NVMe: Namespace) |
+| **PBS** | Proxmox Backup Server — dedupliziertes, inkrementelles Backup-Ziel (kein Live-Storage) |
