@@ -65,7 +65,7 @@ drei Proxmox-Cluster — je einer lokal in A und B (standorteigener Storage, kei
   - NVMe/TCP: **NQN**
 - [ ] ⚠️ **Getrennte Host-NQNs/IQNs bzw. Host-Einträge für die lokale und die Metro-Anbindung** — siehe Phase 4.2 (NDSID-Kollision).
 - [ ] **Host-Gruppen/Host-Sets** bilden — je LUN-Klasse eine eigene, damit ein Volume nicht versehentlich beiden Klassen präsentiert wird.
-- [ ] Sichtprüfung: `showhost`, `showhostset`.
+- [ ] Sichtprüfung: `showhost`, `showhostset` (Host-Definitionen) und `showvlun` (Präsentationen).
 
 ---
 
@@ -83,7 +83,7 @@ Pro Volume/Klasse. Thin ist auf der B10000 der **Default** (`tpvv`); Details in 
 - [ ] **Schwellen bewusst setzen** (`-usr_aw`/`-usr_al`): Überschreitung erzeugt die *Thin Provisioning Soft Threshold Reached* Check Condition — das ist die Frühwarnung, bevor der Pool volläuft.
 - [ ] Optional **Mindest-Allokationsgröße** (`-minalloc`, MB) — verhindert I/O-Verzögerungen durch Volumenwachstum; die Array alloziert dadurch bewusst mehr als gebraucht (`Tot_Rsvd` > `Used`).
 - [ ] Optional **Dedup + Kompression**: `createvv -reduce <cpg> <name> <size>`.
-- [ ] **Präsentieren** an die **richtige Host-Gruppe** (`showvv -host`, `showvlun`).
+- [ ] **Präsentieren** an die **richtige Host-Gruppe** — Kontrolle mit `showvlun` (Präsentation; HPE nennt den Export „VLUN") und `showhost`/`showhostset` (Definitionen).
 - [ ] **Boot-Volume bleibt lokal** — das ist eine **Entwurfsentscheidung**, keine Array-Grenze: Über **FC** unterstützt die B10000 SAN-Boot (eigene Prozedur) und Direct Connect (bestimmte Adapter, ab 10.3.0), über **iSCSI und NVMe/TCP** ist beides ausdrücklich **nicht** unterstützt.
 - [ ] **CHAP** vorbereiten: uni- und bidirektional möglich, aber **nicht für Discovery-Sessions** — und NVMe/TCP-In-Band-Auth verlangt RHEL ≥ 9.4, also einen Kernel/`nvme-cli` mit In-Band-Auth (auf Proxmox/Debian vorher prüfen).
 
