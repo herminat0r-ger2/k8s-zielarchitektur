@@ -361,6 +361,8 @@ Nicht in dieser Liste: Proxmox-, Linux- und HPE-**Host**-Befehle (`nvme`, `iscsi
 
 - HPE Alletra Storage MP B10000 — **CLI-Referenz** (`sd00002409`): `createvv`, `showvv`, `showvlun`, `showhost`, `showhostset`, `showport`, `showrcopy`, `showversion` — jeder Aufruf einzeln geprüft (siehe Anhang)
 - HPE Alletra Storage MP B10000 — **Port-Limits** (`iSCSI`- und `NVMe/TCP target port limits and specifications`): Port-Personas, 256 Sessions/Port, 3072/6144 Sessions/Array, Boot-from-SAN/Direct-Connect-Status, DHCP/iSNS
+- **Proxmox VE Wiki — Stretch Cluster** (Anforderungen, Tie-Breaker-Node, `size=4`/`min_size=2`, Grenzen bei Verlust der Standort-Verbindung)
+- **Ceph-Dokumentation — Stretch Clusters** (Tie-Breaker-Monitor, Zonen-Konfiguration, Netsplit-Verhalten)
 - Proxmox-Forum, Thread *„Please help with Proxmox VE 9 Cluster and Alletra B10000 Via iSCSI"* (Sep 2025) — Praxisbezug: mehrere Subnetze, Multipath vs. Bonding, `LVM over iSCSI`; mit Verweis auf die Blockbridge-Notiz zu LVM-Shared-Storage in Proxmox
 - HPE Alletra Storage MP B10000 — Implementation Guides (RHEL/Oracle Linux, SLES, VMware ESXi)
 - HPE Advisory **a00150116** — Deallocation (Unmap) Issues bei NVMe-Verbindungen, behoben in 10.5.50

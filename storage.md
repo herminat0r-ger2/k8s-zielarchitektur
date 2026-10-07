@@ -173,7 +173,16 @@ Drei Punkte, die dabei überraschen:
 
 ### 3.1 Kriterien, Gewichtung und Rechenweg
 
-Alle Kriterien sind auf **1–10 skaliert und so gerichtet, dass höher = besser** ist — nur dann lässt sich eine Gesamtnote überhaupt addieren. Daraus folgt für die Komplexität: **eine niedrige Komplexität ergibt eine hohe Punktzahl, eine hohe Komplexität eine niedrige.** Die Spalte ist dementsprechend als *„Komplexität (invertiert)"* ausgewiesen und nicht als Komplexitätsgrad.
+Alle Kriterien sind auf **1–10 skaliert und so gerichtet, dass höher = besser** ist — nur dann lässt sich eine Gesamtnote addieren. Für den Betriebsaufwand heißt das: **niedrige Komplexität = hohe Punktzahl, hohe Komplexität = niedrige Punktzahl.** Die Spalte trägt deshalb den Namen dessen, was sie **misst — Einfachheit**, nicht den der Eigenschaft, die sie umkehrt. (Eine Spalte „Komplexität", die einen Nutzenwert enthält, wird zwangsläufig falsch gelesen — genau dieser Fehler steckte in der ersten Fassung.)
+
+**Was die Einstufung bedeutet:**
+
+| Einfachheit | entspricht | Beispiele |
+|---|---|---|
+| 9–10 | in Minuten erledigt, ein bis zwei Schritte | Directory |
+| 6–8 | überschaubar: Multipath-Datei, LUN und Volume Group bzw. Share und Mount | iSCSI/FC + LVM, NFS, LVM-Thin, PBS |
+| 4–5 | erhöht: CLI-Anbindung, Persistenz, Zusatzschichten | NVMe-oF (kein Proxmox-Storage-Typ), ZFS |
+| **2–3** | **ein eigenes Storage-System mit eigenem Betrieb** | **Ceph (MON/MGR/OSD, CRUSH, Pools, eigenes Netz), ZFS over iSCSI** |
 
 | Kriterium | Gewicht | Warum dieses Gewicht |
 |---|---|---|
@@ -181,34 +190,46 @@ Alle Kriterien sind auf **1–10 skaliert und so gerichtet, dass höher = besser
 | HA / Live-Migration | **20 %** | Kern des gestreckten Clusters |
 | Resilienz bei Netzfehlern (Linux-VMs) | **20 %** | Im gestreckten Szenario das praktische Ausfallrisiko Nr. 1 |
 | Performance | **15 %** | wichtig, aber selten der Engpass gegenüber Shared-Fähigkeit |
-| Komplexität (invertiert) | **10 %** | Betriebsaufwand und Fehlerquelle |
+| **Einfachheit** (= invertierte Komplexität) | **10 %** | Betriebsaufwand und Fehlerquelle — hohe Punktzahl = **geringer** Aufwand |
 | Snapshots (Proxmox) | 5 % | wichtig, aber über Array-Snapshots bzw. Volume-Chain abdeckbar |
 | PBS-Integration | 5 % | PBS dockt ohnehin an fast alles an |
 
 **Rechnung:** `Gesamt = Σ (Gewicht × Kriterienwert)`, gerundet auf eine Nachkommastelle. **Wertebereiche** (z. B. „5–8") gehen mit ihrem **Mittelwert** ein. Die Gewichte sind eine begründete Setzung, keine Messung — die Tabelle ist deshalb reproduzierbar: andere Gewichte, nachrechenbares anderes Ergebnis (siehe 3.3).
 
+### 3.1.1 Änderungshistorie der Bewertung
+
+| Änderung | Grund |
+|---|---|
+| **Spaltenreihenfolge korrigiert** | Beim Sortieren der Spalten nach Gewicht wurden die Werte zunächst positionsbasiert zugeordnet — dadurch waren **in jeder Zeile die Werte verschoben** (am deutlichsten bei Ceph RBD: Performance 2, Einfachheit 10). Die Tabelle wird jetzt **namensbasiert** erzeugt und namensbasiert geprüft |
+| **Komplexität → Einfachheit (invertiert)** | Eine Spalte „Komplexität", die einen Nutzenwert trägt, wird zwangsläufig falsch gelesen; niedrige Komplexität muss für eine Addition als **hohe** Punktzahl erscheinen |
+| **Gesamtnote wird gerechnet, nicht gesetzt** | Kriterien, Gewichte und Rechenweg sind offengelegt; Bereiche gehen mit dem Mittelwert ein |
+| **NVMe-oF/TCP: Einfachheit 4** | kein Proxmox-Storage-Typ (CLI-Anbindung, Persistenz, Diagnose), NQN-Trennung Pflicht, Firmware-Gate — aufwendiger als iSCSI |
+| **Ceph: Resilienz 8 → 6** | Die Proxmox-Wiki-Seite *Stretch Cluster* stellt fest, dass der Stretch-Mode **nicht** gegen den Verlust der Verbindung zwischen den Standorten schützt und ein Netsplit den Cluster bis zum Selbst-Fencing bringen kann — das ist das Hauptrisiko dieses Szenarios (siehe ⁷) |
+| **Snapshots auf LVM: 5–8** | PVE 9 kann Volume-Chain-Snapshots (Technologie-Vorschau), verlangt aber thin + discard; Thin kommt aus der CPG |
+| **Firmware-Gate ≥ 10.5.50** | Beide NVMe-Transporte (FC-NVMe und NVMe/TCP) betroffen — Advisory a00150116, siehe ⁵ |
+
 ### 3.2 Ergebnis
 
-| Storage-Typ | Shared / Metro geeignet | HA / Live-Migration | Resilienz bei Netzfehlern (Linux-VMs) | Performance | Komplexität (invertiert) | Snapshots (Proxmox) | PBS-Integration | Gesamt-Eignung im Ziel-Szenario | Empfehlung für dein Setup |
+| Storage-Typ | Shared / Metro geeignet | HA / Live-Migration | Resilienz bei Netzfehlern (Linux-VMs) | Performance | Einfachheit | Snapshots (Proxmox) | PBS-Integration | Gesamt-Eignung im Ziel-Szenario | Empfehlung für dein Setup |
 |---|---|---|---|---|---|---|---|---|---|
-| **FC + LVM** | **10** | 5–8 | 9.5 | 6 | **10** | 9–10 | 8 | **8.5** | Sehr gut — ohne NVMe-Komplexität; Boot from SAN/Direct Connect möglich ⁶ |
-| **iSCSI + LVM (Thick)** | **10** | 5–8 | 9 | 6 | **10** | 9–10 | 8 | **8.4** | **Primär empfohlen** — nativ in Proxmox, kein NQN-Risiko, geringste Komplexität ⁴ |
-| **NVMe-oF/FC + LVM** | **10** | 5–8 | **10** | 4 | **10** | **10** | 8 | **8.3** | **Beste Performance** (HBA-Offload, bis 12 Ports/Node) — FC-Fabric nötig, FW-Gate ⁵ |
-| **NVMe-oF/TCP + LVM** | **10** | 5–8 | 9.5 | 4 | **10** | 9.5 | 8 | **8.2** | Ohne FC-Fabric — mehr Aufwand (kein PVE-Typ), FW-Gate ⁵, NQN-Trennung Pflicht ³ ⁴ |
-| **NFS (Alletra File)** | 9 | 6–8 | 7–8 | 8 | 9 | 6–7 | 9 | **8.0** | Gut für ISO/Templates |
-| **ZFS over iSCSI** | 9 | **10** | 8 | 3 | 9 | 7–8 | 8 | **8.0** | Möglich, aber komplex |
-| **Ceph RBD** | 8 | **10** | 8–9 | 2–3 | **10** | 8 | 9 | **7.9** | Nur wenn Hyperconverged |
-| **CephFS** | 8 | 9 | 7 | 3 | 9 | 7 | 8 | **7.3** | Optional File |
-| **ZFS lokal + Replication** | 3 | **10** | 9–10 | 6 | 4 | 5 | **10** | **6.7** | Nur ergänzend |
-| **Directory / CIFS** | 2–7 | 5–7 | 5–7 | **9** | 2–7 | 4–6 | 9 | **6.0** | Nur ISO/Backup |
-| **LVM-Thin lokal** | 1 | 9 | 9 | 8 | 1 | 3 | 8 | **5.7** | Nicht für HA — `lvmthin` ist **kein** shared Storage |
-| **ZFS auf Shared-LUN** (NVMe-oF/iSCSI-LUN + `zpool`) | 1 | **10** | 9 | 5 | 1 | 3 | **10** | **5.5** | **Nein** — ZFS ist nicht cluster-aware, siehe [4.4](#44-zfs-lokal--replication--und-warum-nvme-of--zfs-kein-shared-storage-ist) |
-| **PBS** | ja (Backup) | n/a | – | **8** | n/a | n/a | **10** | n/a | **Obligatorisch** (eigene Backup-Schicht) |
+| **FC + LVM** | **10** | **10** | 9–10 | 9.5 | 6 | 5–8 | 8 | **9.2** | Sehr gut — ohne NVMe-Komplexität; Boot from SAN/Direct Connect möglich ⁶ |
+| **NVMe-oF/FC + LVM** | **10** | **10** | **10** | **10** | 4 | 5–8 | 8 | **9.1** | **Beste Performance** (HBA-Offload, bis 12 Ports/Node) — FC-Fabric nötig, FW-Gate ⁵ |
+| **iSCSI + LVM (Thick)** | **10** | **10** | 9–10 | 9 | 6 | 5–8 | 8 | **9.1** | **Primär empfohlen** — nativ in Proxmox, kein NQN-Risiko, geringster Aufwand ⁴ |
+| **NVMe-oF/TCP + LVM** | **10** | **10** | 9.5 | 9.5 | 4 | 5–8 | 8 | **9.0** | Ohne FC-Fabric — mehr Aufwand (kein PVE-Typ), FW-Gate ⁵, NQN-Trennung Pflicht ³ ⁴ |
+| **NFS (Alletra File)** | 9 | 9 | 6–7 | 7–8 | 8 | 6–8 | 9 | **8.1** | Gut für ISO/Templates |
+| **ZFS over iSCSI** | 9 | 9 | 7–8 | 8 | 3 | **10** | 8 | **8.0** | Möglich, aber komplex: eigener ZFS-Host + iSCSI-Target |
+| **Ceph RBD** | 8 | **10** | 6 | 8–9 | 2 | **10** | 9 | **7.6** | Nur wenn Hyperconverged — eigenes Storage-Produkt; der Stretch-Mode schützt **nicht** gegen den Verlust der Standort-Verbindung ⁷ |
+| **CephFS** | 8 | 9 | 6 | 7 | 3 | 9 | 8 | **7.2** | Optional File — gleicher Stack wie Ceph RBD |
+| **ZFS lokal + Replication** | 3 | 4 | 5 | 9–10 | 6 | **10** | **10** | **5.6** | Nur ergänzend |
+| **Directory / CIFS** | 2–7 | 2–7 | 4–6 | 5–7 | **9** | 5–7 | 9 | **5.6** | Nur ISO/Backup |
+| **LVM-Thin lokal** | 1 | 1 | 3 | 9 | 8 | 9 | 8 | **4.0** | Nicht für HA — `lvmthin` ist **kein** shared Storage |
+| **ZFS auf Shared-LUN** (NVMe-oF/iSCSI-LUN + `zpool`) | 1 | 1 | 3 | 9 | 5 | **10** | **10** | **3.9** | **Nein** — ZFS ist nicht cluster-aware, siehe [4.4](#44-zfs-lokal--replication--und-warum-nvme-of--zfs-kein-shared-storage-ist) |
+| **PBS** | ja (Backup) | n/a | n/a | – | **8** | n/a | **10** | n/a | **Obligatorisch** (eigene Backup-Schicht) |
 
 ### 3.3 Wie belastbar ist das Ergebnis?
 
-- **Die vier Block-Optionen liegen innerhalb von 0,3 Punkten** (8,5 / 8,4 / 8,3 / 8,2). Das Modell kürt hier **keinen Sieger** — die Punktunterschiede liegen unterhalb der Unsicherheit der Gewichte. Die Kriterien trennen sauber zwischen *Shared-Block* und *allem anderen*, nicht zwischen NVMe/FC, FC, iSCSI und NVMe/TCP.
-- **Kippt man die Gewichtung** (z. B. Performance 25 %, Komplexität 5 %), verschiebt sich die Reihenfolge zugunsten von NVMe/FC. Die Entscheidung fällt also **nicht über Punkte, sondern über zwei harte Randbedingungen:** Ist ein **FC-Fabric** vorhanden? Und welches **Betriebsrisiko** will man tragen (Firmware-Gate ⁵, NQN-Trennung ⁴)?
+- **Die vier Block-Optionen liegen innerhalb von 0,2 Punkten** (9,2 FC + LVM / 9,1 NVMe-oF/FC / 9,1 iSCSI + LVM / 9,0 NVMe-oF/TCP). Das Modell kürt hier **keinen Sieger** — die Punktunterschiede liegen unterhalb der Unsicherheit der Gewichte. Die Kriterien trennen sauber zwischen *Shared-Block* und *allem anderen*, nicht zwischen den vier Block-Varianten.
+- **Kippt man die Gewichtung** (Performance 25 %, Einfachheit 5 %, Rest proportional), ergibt sich **NVMe/FC 9,6 · FC + LVM 9,4 · NVMe/TCP 9,3 · iSCSI 9,3** — der erste Platz wandert zu NVMe/FC, NVMe/TCP zieht an iSCSI vorbei. Die Punkte sind also eine Folge der Gewichte, keine Eigenschaft der Technik. Entschieden wird **nicht über Punkte, sondern über zwei harte Randbedingungen:** Ist ein **FC-Fabric** vorhanden? Und welches **Betriebsrisiko** will man tragen (Firmware-Gate ⁵, NQN-Trennung ⁴)?
 - **Ohne FC** bleibt von der Spitzengruppe **iSCSI + LVM** — und für die Metro-Klasse entweder iSCSI auf getrenntem Port-Set oder NVMe/TCP mit dem Port-Persona-Split (Design-Vorlage in [`checkliste-storage.md`](checkliste-storage.md)).
 - **PBS** steht in der Tabelle außer Konkurrenz: es ist keine Ablage für laufende VM-Disks, sondern die Backup-Schicht — **obligatorisch**, unabhängig vom Ergebnis oben.
 
@@ -219,6 +240,7 @@ Alle Kriterien sind auf **1–10 skaliert und so gerichtet, dass höher = besser
 - ³ Ethernet-Seite der Array: je Adapter **4 Ports** (10/25GbE-4-Port-HBA: ab Werk 2× iSCSI + 2× NVMe/TCP) bzw. **2 Ports** (100GbE-2-Port-OCP: ab Werk 2× iSCSI); ab OS **10.6** bis zu **10 Frontend-Ethernet-Ports** einzeln als iSCSI **oder** NVMe/TCP — also weniger als die bis zu 12 FC-Ports/Node, aber **mehr als zunächst dargestellt**. Dazu mehr Host-CPU-Last als FC. **NVMe/RDMA (RoCE) bietet die B10000 nicht.**
 - ⁴ **Warum iSCSI vor NVMe/TCP liegt**, obwohl NVMe/TCP die bessere Latenz und nativen Multipath hat: (a) beide teilen sich **dieselben Ethernet-Ports der Array** — kein Port-Vorteil zueinander; (b) der **NQN/NDSID-Fallstrick tritt nur bei NVMe auf** (iSCSI kennt ihn im SCSI-Namespace nicht); (c) Proxmox hat einen **nativen Storage-Typ `iscsi`**, aber **keinen** für NVMe-oF; (d) beide NVMe-Transporte brauchen **Firmware ≥ 10.5.50**. Wer den Fallstrick sauber löst (getrennte Port-Sets/Host-NQNs, Test nach [4.1.2](#412-der-metro-paar-fallstrick)) und das Firmware-Gate erfüllt, fährt mit NVMe/TCP technisch besser.
 - ⁵ **Firmware-Gate für beide NVMe-Transporte:** HPE Advisory **a00150116** — bis OS 10.5.x ohne Limit gesendete Deallocate-Requests (≥ 2 GB) liefen in **Timeouts**; ab 10.5.x kündigt die Array **max. 32 MB** pro Request an, größere werden **abgelehnt** und der Platz bleibt *„stranded within the current namespace"*. Betroffen sind **FC-NVMe und NVMe/TCP**. **Behoben in 10.5.50.**
+- ⁷ **Warum Ceph die niedrigste Einfachheit (2) hat:** Ceph ist kein Storage-*Typ*, sondern ein zusätzliches **verteiltes Storage-Produkt**, das neben der Array betrieben wird. Der Proxmox-Guide widmet ihm ein eigenes Kapitel mit **2.071 Zeilen und 62 Abschnitten** (Monitor, Manager, OSDs, Pools, CRUSH & Device Classes, Cephx, Maintenance inkl. Netz-Wechsel und HCI-Shutdown, Monitoring/Troubleshooting). Zum Vergleich: „iSCSI + LVM" braucht LUN, `multipath.conf` und eine Volume Group. In einem Setup mit vorhandener Enterprise-Array kommt doppelter Betrieb hinzu (siehe [4.3](#43-ceph-rbd)).
 - ⁶ **Über FC unterstützt die B10000 Boot from SAN** (eigene Prozedur) **und Direct Connect** (bestimmte Host-Adapter ab 10.3.0, Punkt-zu-Punkt 16/32 Gbps); über **iSCSI und NVMe/TCP ist beides nicht unterstützt**. Für diese Architektur bleiben die Boot-Volumes lokal — die Option ist ein FC-Vorteil, kein Muss.
 
 ---
@@ -327,9 +349,11 @@ Ein Proxmox-Forum-Fall (PVE 9.2, **zwei aktiv-aktiv gespiegelte HPE-Alletra-Arra
 
 ### 4.3 Ceph RBD
 
-- Proxmox hat offiziellen Stretch-Mode (`size=4`, `min_size=2`, Tie-Breaker).
-- Bei < 5 ms machbar, aber du hast bereits eine teure Enterprise-Array → doppelter Aufwand und Ressourcenverbrauch unnötig.
-- Nur sinnvoll, wenn du hyperconverged ohne externe Array willst.
+- **Voraussetzungen des Stretch-Mode** (Proxmox-Wiki *Stretch Cluster*, Ceph-Doku *Stretch Clusters*): stabile, redundante Verbindung mit ausreichender Bandbreite für das Ceph-Netz und **RTT ≤ 5 ms**; **gleich viele Nodes** je Standort (PVE-Quorum); **gleich viele Ceph-Monitore** je Standort (MON-Quorum); **gleich viel Storage** je Standort; zusätzlich ein **Tie-Breaker-Node in einem dritten Standort mit eigenem Ceph-Monitor**; Pools mit **`size=4` und `min_size=2`**; **keine Erasure-Coded-Pools**; **NVMe-SSDs für die OSDs** (keine HDDs/hybrid, damit die Recovery kurz bleibt).
+- Der **Tie-Breaker-Monitor kann eine VM sein** — er sollte aber wie die übrigen Monitore dimensioniert werden (Ceph-Doku: mind. 6 vCPU / 64 GB RAM für kleinere, 128 GB für größere Cluster).
+- ⚠️ **Der entscheidende Punkt für dieses Szenario:** Der Stretch-Mode schützt **nicht** gegen den **Verlust der Verbindung zwischen den Standorten**. Die Proxmox-Wiki-Seite nennt das ausdrücklich als Grenze: ein Netsplit erzeugt eine asymmetrische Topologie, der Cluster kann sich **selbst fencen oder nicht-operabel werden**; laut Ceph-Doku wird der I/O in dieser Lage unter Umständen **gar nicht mehr erlaubt**, weil die Durability-Zusagen nicht erfüllbar sind. Das ist genau das Ausfallbild, gegen das diese Architektur gebaut wird.
+- **Fazit:** technisch machbar bei < 5 ms, aber **doppelter Betrieb** — ein zweites verteiltes Storage-Produkt neben einer Enterprise-Array, mit eigenem Quorum, eigenem Netz, eigenen Recovery-Fällen und ohne Schutz gegen den Verbindungsverlust zwischen den Standorten. **Nur sinnvoll, wenn hyperconverged ohne externe Array gebaut wird.**
+- Zur Betriebsfläche: Der Ceph-Teil des Proxmox-Guides umfasst **2.071 Zeilen in 62 Abschnitten** (Monitor, Manager, OSDs, Pools, CRUSH & Device Classes, Cephx, Maintenance inkl. Netz-Wechsel und HCI-Shutdown, Monitoring/Troubleshooting) — die Begründung für `Einfachheit = 2` in [3](#3-bewertungstabelle-enterprise-stretched-cluster).
 
 ### 4.4 ZFS lokal + Replication — und warum „NVMe-oF + ZFS" kein Shared Storage ist
 
@@ -455,3 +479,11 @@ Kurz erklärt, was die im Dokument verwendeten Storage- und Cluster-Begriffe tec
 | **Metro-Link** | Die dedizierte Verbindung zwischen den Standorten (Anforderung hier: < 5 ms RTT) |
 | **LUN / Namespace** | Die vom Array präsentierte logische Speichereinheit (SCSI: LUN, NVMe: Namespace) |
 | **PBS** | Proxmox Backup Server — dedupliziertes, inkrementelles Backup-Ziel (kein Live-Storage) |
+
+### Quellen
+
+- Proxmox VE Admin Guide — Kapitel 7 *Storage* (Storage Types/Feature-Matrix, Thin Provisioning, Trim/Discard)
+- Proxmox VE Wiki — *Stretch Cluster* (Ceph-Anforderungen, Tie-Breaker-Node, `size=4`/`min_size=2`, Grenzen bei Verlust der Standort-Verbindung)
+- Ceph-Dokumentation — *Stretch Clusters* (Tie-Breaker-Monitor, Zonen-Konfiguration, Netsplit-Verhalten)
+- HPE Alletra Storage MP B10000 — CLI-Referenz (`sd00002409`), Implementation Guides (RHEL/Oracle, SLES, ESXi), Port-Limits-Seiten, Advisory **a00150116**
+- Proxmox-Forum — *„Please help with Proxmox VE 9 Cluster and Alletra B10000 Via iSCSI"* (Praxis: getrennte Subnetze, Multipath statt Bonding)
