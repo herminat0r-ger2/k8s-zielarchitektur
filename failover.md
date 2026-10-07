@@ -3,6 +3,10 @@
 Anforderung, Mechanik und Entscheidungen für die **sofortige Übernahme durch Standort B**.
 Dieses Dokument gehört zur Hauptarchitektur (nicht zum Backup-Konzept) — Backup ist das Sicherheitsnetz gegen Datenverlust, **kein Übernahme-Pfad**.
 
+> **Status (revidiert 2026-10-07).** Die Topologie-Entscheidung lautet **gestreckter Proxmox-Cluster** auf dem externen Metro-Storage (HPE Alletra B10000) — siehe **§8**.
+> Die Abschnitte **§5** und **§7** beschreiben den **externen Witness** für die damit **verworfene** Variante *getrennter* Cluster; im gestreckten Cluster übernimmt der **Corosync-QDevice** die Rolle der dritten Stimme (§9.5).
+> Die Mechanik von Split-Brain und Failover (§4, §6) gilt unverändert.
+
 ## 1. Anforderung (verbindlich)
 
 Standort B übernimmt **immer sofort** — als Hot Standby oder Active/Active. Ein Restore aus dem Backup ist kein Übernahme-Pfad (nur Sicherheitsnetz gegen Datenverlust/Korruption). Konsequenz: **Jede** Datenbank braucht Replikation nach B (Patroni/DB-eigene Replikation), auch "nur eine Instanz" ohne HA im Normalbetrieb. Unterschied nur Automatisierungsgrad:
@@ -31,6 +35,8 @@ Ohne Quorum weiß B nicht, ob A down ist oder nur der Link A–B. Falscher Autom
 
 ## 5. Der Witness (3. Instanz) — was er prüft
 
+> Gilt für die **verworfene** Variante getrennter Cluster. Im gestreckten Cluster ist die dritte Stimme der **Corosync-QDevice** (§9.5). Die Check-Matrix bleibt als **Monitoring-Checkliste** sinnvoll.
+
 **Der Witness prüft keine Anwendungen, keine einzelnen VMs und nicht "das iLO eines Servers".** Er prüft die Infrastruktur-Ebenen von Standort A, mehrfach, über einen unabhängigen Pfad:
 
 | Ebene | Check |
@@ -55,7 +61,9 @@ Ohne Quorum weiß B nicht, ob A down ist oder nur der Link A–B. Falscher Autom
 2. **Quorum/Witness:** Automatischer Failover nur mit Bestätigung durch die 3. Instanz. A lebt + Link down → kein Failover. A wirklich down → B failovert.
 3. **Fencing bei Rückkehr:** A kommt nach Failover als Replica zurück (DBs: Patroni/DCS macht das automatisch). Legacy-VMs: Spiegel-Richtung umkehren (B → A), sonst überschreibt A den neueren Stand.
 
-## 7. Entscheidung (offen — gehört in die Zielarchitektur)
+## 7. Entscheidung (verworfen — galt für getrennte Cluster)
+
+> Diese Abwägung gehört zur **verworfenen** Variante getrennter Cluster (siehe §8). Im gestreckten Cluster ist die dritte Stimme der **Corosync-QDevice** (§9.5).
 
 | Option | Konsequenz |
 |---|---|
@@ -64,12 +72,129 @@ Ohne Quorum weiß B nicht, ob A down ist oder nur der Link A–B. Falscher Autom
 
 Anforderung "B übernimmt sofort" → automatisch → **Witness aufnehmen** (Standort C, inkl. Down-Detection-Check-Matrix aus Abschnitt 5).
 
-## 8. Warum KEIN gestreckter Proxmox-Cluster
+## 8. Entscheidung: gestreckter Proxmox-Cluster (revidiert 2026-10-07)
 
-- **Corosync-Latenz über den Metro-Link:** Die offizielle Doku nennt **kein hartes Node-Limit** ("no explicit limit", Praxis 50+ Nodes möglich) — der begrenzende Faktor ist **Corosync-PPS/Latenz**. Ein gestreckter Cluster müsste die Cluster-Kommunikation über den Metro-Link laufen lassen (höhere Latenz als LAN) → Token-Timeout-/Quorum-Risiko, insbesondere bei Link-Flackern.
-- **Skala:** 60–80 Hosts in einem Cluster sind praktisch riskant und unüblich; konservativ plant man 16–24 Nodes je Cluster → mehrere Cluster pro DC.
-- Ohne gestrecktes Ceph bringt ein gestreckter Proxmox-Cluster nichts (VM-Disks nicht in B) — und gestrecktes Ceph = Metro-Probleme (Split-Brain im Storage, Tie-Breaker, Blast-Radius, RBD single-writer).
-- Fencing bei Link-Flackern ist ein echtes Risiko (ein Standort killt den anderen bei kurzem Aussetzer).
-- Blast-Radius: Ein Konfigurationsfehler/Bug betrifft beide Standorte gleichzeitig.
+**Entscheidung.** Ein **gestreckter Proxmox-Cluster** über beide Standorte auf **einem gemeinsamen externen Shared Storage** (HPE Alletra MP B10000 als Metro-Cluster mit Peer Persistence). Die frühere Fassung dieses Abschnitts ("Warum KEIN gestreckter Proxmox-Cluster", getrennte Cluster je Standort + externer Witness) ist damit **verworfen**.
 
-Die getrennten Cluster + Witness auf externer Ebene liefern dieselbe Übernahmequalität ohne diese Risiken — gegen den Preis eines kleinen, gut getesteten Failover-Mechanismus.
+### 8.1 Warum die frühere Begründung nicht mehr trägt
+
+Die alte Fassung lehnte den gestreckten Cluster unter anderem so ab:
+
+> "Ohne gestrecktes Ceph bringt ein gestreckter Proxmox-Cluster nichts (VM-Disks nicht in B) — und gestrecktes Ceph = Metro-Probleme (Split-Brain im Storage, Tie-Breaker, Blast-Radius, RBD single-writer)."
+
+Diese Prämisse setzt **hyperkonvergentes Ceph als Storage der Proxmox-VM-Disks** voraus. Im Zielbild liegt diese Ebene aber auf einer **externen Array**:
+
+| Annahme der alten Fassung | Tatsächliches Zielbild (Proxmox-VM-Storage) |
+|---|---|
+| Storage = hyperkonvergentes Ceph, im Cluster verteilt | Storage = externe **HPE Alletra MP B10000**, Metro-Cluster (Peer Persistence) |
+| VM-Disks wären ohne gestrecktes Ceph nicht in B | Die Disks sind **ohne Ceph** in beiden Standorten (Array-seitige Metro-Replikation) |
+| Storage-Split-Brain / RBD single-writer im Cluster | **Entfällt** — die Array-eigene Quorum-Witness entscheidet, nicht der Cluster |
+| "gestreckter Cluster bringt nichts" | **Trifft hier nicht zu** — der Cluster profitiert direkt vom Metro-Storage (Live-Migration und HA über beide Standorte) |
+
+Damit fällt das stärkste Gegenargument weg.
+
+> **Nicht berührt:** Die Anforderung aus §1 bleibt in vollem Umfang bestehen. Die Array-Metro-Replikation ersetzt **nicht** die Replikation auf Anwendungsebene — Patroni/DB-eigene Replikation und RBD-Mirror für Kubernetes-PVs bleiben **Pflicht**. Die Alletra macht das Storage hochverfügbar; sie macht eine Datenbank nicht konsistent über zwei Standorte.
+
+### 8.2 Das Node-Skala-Argument ist ein Artefakt des alten Timeouts
+
+Die alte Fassung nannte "16–24 Nodes je Cluster" als konservative Planungsgröße. Diese Zahl war **nicht willkürlich** — sie traf genau den Punkt, an dem die Corosync-Timeouts mit dem damaligen `token_coefficient` von 650 ms die 30-s-Marke reißen (ab 19 Nodes). Seit **Proxmox VE 9.2** bekommen neue Cluster explizit `token_coefficient: 125`; damit verschiebt sich die Grenze auf ~88 Nodes. Formel, Schwellen und Messwerte: **§9.2**.
+
+Das offizielle Node-Limit ist ohnehin keines: *"There's no explicit limit for the number of nodes in a cluster … in practice, the actual possible node count may be limited by the host and network performance"* — in Produktion sind über 50 Nodes dokumentiert.
+
+### 8.3 Verbleibende Risiken und ihre Gegenmaßnahme
+
+| Risiko | Gegenmaßnahme | Wo |
+|---|---|---|
+| Corosync-Latenz und -Jitter über den Metro-Link | Latenz-Budget < 5 ms einhalten; Timeouts **messen** und austarieren | §9.1–§9.3 |
+| Link-Flackern → falscher Ausschluss eines Standorts | Zwei Links auf **getrennten physischen Pfaden**, Prioritäten explizit gesetzt | §9.4 |
+| Metro-Link als SPOF für Cluster-Traffic | Redundanter Metro-Pfad; Storage läuft getrennt über die dualen Fabrics | §9.4 |
+| Gerade Stimmenzahl bei 2 Standorten → keine Mehrheit bei Trennung | **Corosync-QDevice** (`corosync-qnetd`) am dritten Standort — über TCP/IP, **nicht** an das 5-ms-Budget gebunden | §9.5 |
+| Blast-Radius: ein Konfigurationsfehler trifft beide Standorte | Change Control, gestaffelte Rollouts — **nie** beide Standorte gleichzeitig aktualisieren | — |
+
+### 8.4 Was sich für die übrigen Abschnitte ändert
+
+- **§3 (Failover-Ebenen)** gilt unverändert.
+- **§4 (Split-Brain)** gilt unverändert — die Storage-Ebene beantwortet jetzt das Array, die Cluster- und Anwendungsebene weiterhin das Quorum.
+- **§5 und §7** beschreiben den **externen Witness** für die verworfene Variante. Im gestreckten Cluster ist die dritte Stimme der **Corosync-QDevice** — bewusst ein anderes Konstrukt: eine Quorum-Stimme *innerhalb* eines Clusters, kein Beobachter getrennter Cluster.
+
+## 9. Corosync-Betrieb im gestreckten Cluster (Auflagen)
+
+### 9.1 Latenz-Budget
+
+Proxmox VE Administration Guide, *Cluster Network Requirements*:
+
+> "The Proxmox VE cluster stack requires a reliable network with latencies under 5 milliseconds (LAN performance) between all nodes to operate stably. While on setups with a small node count a network with higher latencies *may* work, this is not guaranteed and gets rather unlikely with more than three nodes and latencies above around 10 ms."
+
+Einordnung: Proxmox hat **kein eigenes "Stretched-Cluster"-Feature**. Die 5 ms sind die *allgemeine* Cluster-Anforderung — ein 2-Standort-Cluster ist zulässig, solange er sie erfüllt. Es gibt **keine Zusage für höhere Latenzen**; die 5 ms sind hartes Budget, kein Richtwert. Der Metro-Link ist damit Teil des Corosync-Rings, nicht nur Transportweg für Storage.
+
+### 9.2 Timeout-Formel und Schwellen
+
+Corosync nutzt Token-Passing; die Timeouts skalieren mit der Node-Zahl:
+
+```
+token     = 3000 + (number_of_nodes - 2) × token_coefficient   [ms]
+consensus = 1.2 × token
+```
+
+Die Summe ist die Mindestzeit, bis nach einem Node-Ausfall eine neue Cluster-Mitgliedschaft steht. Die Doku nennt drei Schwellen:
+
+- **> 30 s** — Optimierung empfohlen
+- **> 40 s** — empfohlen
+- **> 45 s** — **stark** empfohlen (der HA-Watchdog feuert bei **60 s** → Fencing-Risiko für einen *gesunden* Node)
+
+Nach der Formel durchgerechnet:
+
+| Nodes | 650 ms (Default vor PVE 9.2) | **125 ms** (PVE 9.2+) |
+|---|---|---|
+| 16 | 26,6 s ✓ | 10,4 s ✓ |
+| 24 | 38,1 s ⚠️ | 12,7 s ✓ |
+| 32 | 49,5 s ❌ | 14,9 s ✓ |
+| 64 | 95,3 s ❌ | 23,6 s ✓ |
+| **Summe > 30 s ab** | **19** Nodes | **88** Nodes |
+| **Summe > 45 s ab** | **29** Nodes | **142** Nodes |
+
+### 9.3 Messen statt schätzen
+
+```bash
+corosync-cmapctl | grep -Ew 'runtime.config.totem.token|runtime.config.totem.consensus'
+pvecm status      # Transport: knet, Quorum, Expected votes
+pvecm nodes
+```
+
+**Spannungsfeld im gestreckten Cluster.** Der Koeffizient ist kein Einbahnregler: kleiner = schnellere Mitgliedschaft, aber weniger Toleranz für Latenzspitzen über den Metro-Link; größer = toleranter, aber träger und näher am Watchdog. Über einen Metro-Link mit Jitter ist deshalb **gegen die gemessenen Werte** zu tunen, nicht nach Gefühl — und die Summe muss unter 45 s bleiben.
+
+### 9.4 Links und Prioritäten
+
+- "To provide useful failover, **every link should be on its own physical network connection**."
+- **Höhere Zahl = höhere Priorität = aktiv.** Beispiel aus der Doku:
+  ```bash
+  pvecm create CLUSTERNAME --link0 10.10.10.1,priority=15 --link1 10.20.20.1,priority=20
+  # -> link1 wird zuerst benutzt (höhere Priorität)
+  ```
+  Ohne manuelle Prioritäten gilt die **kleinere** Link-Nummer als höher priorisiert.
+- Nur der Link mit der höchsten Priorität trägt Corosync-Traffic; alle anderen sind Standby. **Prioritäten dürfen nicht gemischt werden** — Links mit unterschiedlicher Priorität können nicht miteinander kommunizieren.
+- Nützliche Strategie: VM- und Storage-Netze als **niedrigprioritären Fallback**-Link eintragen ("a higher latency or more congested connection might be better than no connection at all").
+- Link zu einem **laufenden** Cluster hinzufügen: in `corosync.conf` pro Node ein `ringX_addr` im `nodelist` ergänzen (X für alle Nodes gleich, pro Node eindeutig), dann einen `interface`-Block mit passender `linknumber` im `totem`-Abschnitt.
+
+### 9.5 Dritte Stimme: Corosync-QDevice
+
+> "We support QDevices for clusters with an even number of nodes and recommend it for 2 node clusters."
+
+- **QDevice Net** (`corosync-qnetd`) ist der derzeit einzige unterstützte externe Arbiter. Er gibt seine Stimme **nur einer** Partition — und nur, wenn diese danach wieder Quorum hat.
+- **Der entscheidende Vorteil für den gestreckten Cluster:** "Unlike corosync itself, a QDevice connects to the cluster over TCP/IP. The daemon can also run outside the LAN of the cluster and isn't limited to the low latencies requirements of corosync." → Der QDevice darf an einem **dritten Standort über WAN** laufen und unterliegt **nicht** dem 5-ms-Budget aus §9.1.
+- Bei **ungerader** Node-Zahl wird der QDevice derzeit **nicht** empfohlen.
+
+### 9.6 Token-Koeffizient ändern
+
+1. Netzwerk gegen die Anforderungen aus §9.1 prüfen (insbesondere Latenz und Jitter).
+2. In `/etc/pve/corosync.conf` im `totem`-Abschnitt `token_coefficient: 125` setzen (falls nicht schon explizit vorhanden).
+3. **`config_version` erhöhen** — Pflicht, sonst wird die Änderung nicht übernommen.
+4. Reload prüfen: `systemctl status corosync`, `journalctl -b -u corosync`; falls nötig `systemctl restart corosync`.
+5. "Test your setup thoroughly for stability!"
+
+---
+
+## Quellen (Proxmox-Doku)
+
+- Proxmox VE Administration Guide, Kapitel 5 — *Cluster Manager*: `pvecm_cluster_network_requirements`, `pvecm_redundancy`, `pvecm_changing_token_coefficient`, `_corosync_external_vote_support`
+- Proxmox VE Wiki — *Cluster Manager*: Cluster Network, Corosync Redundancy, QDevice

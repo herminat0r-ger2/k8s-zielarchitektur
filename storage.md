@@ -21,7 +21,7 @@
 
 | Komponente | Ausprägung |
 |---|---|
-| **Cluster** | Proxmox Stretched Cluster über 2 Standorte (< 5 ms RTT) → offiziell unterstützt (Corosync + Quorum-Witness/Tie-Breaker empfohlen) |
+| **Cluster** | Proxmox Cluster über 2 Standorte (**Stretched Cluster**) — **kein eigenes Proxmox-Feature**: zulässig, solange die allgemeine Cluster-Anforderung **< 5 ms Latenz zwischen allen Nodes** erfüllt ist (Admin Guide: *"latencies under 5 milliseconds … to operate stably"*; über ~10 ms ab mehr als drei Nodes *"rather unlikely"*). Corosync-Timeouts sind auf die Metro-Latenz abzustimmen, dritte Stimme über **Corosync-QDevice** — Details: [failover.md §8/§9](failover.md) |
 | **Primärer Shared Storage** | HPE Alletra MP B10000 als Metro-Cluster (Peer Persistence / Active Peer Persistence). Unterstützt Block (iSCSI, FC, NVMe-oF/FC/TCP) **und** File (NFS) |
 | **Backup** | Proxmox Backup Server (PBS) – dediziert, idealerweise an beiden Standorten oder mit Replikation |
 | **Kritisch** | Resilienz der Linux-VMs bei Netzwerkfehlern (Pfadausfall, Site-Trennung, Storage-Netz-Probleme). Linux-Gäste profitieren stark von Multipath, Queue-Timeouts und filesystem-seitigen Features (z. B. `nofail`, `x-systemd.device-timeout`) |
@@ -218,6 +218,8 @@ Kurz erklärt, was die im Dokument verwendeten Storage- und Cluster-Begriffe tec
 **Bezug zum Stretched Cluster.** Über einen Metro-Link ist die Corosync-Latenz (und PPS) der bestimmende Faktor — **nicht** die Node-Zahl: die Doku nennt kein hartes Limit, in Produktion sind > 50 Nodes dokumentiert. Bei Link-Flackern droht der fälschliche Ausschluss eines Standorts. Genau dieses Argument trägt in [`failover.md`](failover.md) §8 die Entscheidung **gegen** einen gestreckten Proxmox-Cluster.
 
 **Zwei-Node-Konstellation.** Für verlässliches Quorum braucht es eine ungerade Stimmenzahl — bei 2 Nodes übernimmt das der **Corosync-QDevice** (3. Vote). Davon zu unterscheiden ist der **externe Witness** aus `failover.md`: keine Quorum-Stimme *innerhalb* eines Clusters, sondern eine eigenständige externe Instanz mit eigener Check-Logik über die getrennten Cluster.
+
+> **Betriebsauflagen im gestreckten Cluster** — Latenz-Budget, Timeout-Formel (`token`/`consensus`) mit den 30/40/45/60-s-Schwellen, Link-Prioritäten und Corosync-QDevice: siehe [`failover.md`](failover.md) **§9**.
 
 ### Verwandte Begriffe (Kurzform)
 
