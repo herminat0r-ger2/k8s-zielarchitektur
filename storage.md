@@ -21,7 +21,7 @@
 
 | Komponente | Ausprägung |
 |---|---|
-| **Cluster** | Proxmox Cluster über 2 Standorte (**Stretched Cluster**) — **kein eigenes Proxmox-Feature**: zulässig, solange die allgemeine Cluster-Anforderung **< 5 ms Latenz zwischen allen Nodes** erfüllt ist (Admin Guide: *"latencies under 5 milliseconds … to operate stably"*; über ~10 ms ab mehr als drei Nodes *"rather unlikely"*). Corosync-Timeouts sind auf die Metro-Latenz abzustimmen, dritte Stimme über **Corosync-QDevice** — Details: [failover.md §8/§9](failover.md) |
+| **Cluster** | Drei Proxmox-Cluster: je einer eigenständig in Standort A und B (lokaler Alletra-Storage, **kein** Sync) **plus** ein **gestreckter** Cluster über beide Standorte. Für den gestreckten gilt: **kein eigenes Proxmox-Feature** — zulässig, solange die allgemeine Cluster-Anforderung **< 5 ms Latenz zwischen allen Nodes** erfüllt ist (Admin Guide: *"latencies under 5 milliseconds … to operate stably"*). Corosync-Timeouts auf die Metro-Latenz abstimmen, dritte Stimme über **Corosync-QDevice** — Details: [failover.md §8/§9](failover.md) |
 | **Primärer Shared Storage** | HPE Alletra MP B10000 als Metro-Cluster (Peer Persistence / Active Peer Persistence). Unterstützt Block (iSCSI, FC, NVMe-oF/FC/TCP) **und** File (NFS) |
 | **Backup** | Proxmox Backup Server (PBS) – dediziert, idealerweise an beiden Standorten oder mit Replikation |
 | **Kritisch** | Resilienz der Linux-VMs bei Netzwerkfehlern (Pfadausfall, Site-Trennung, Storage-Netz-Probleme). Linux-Gäste profitieren stark von Multipath, Queue-Timeouts und filesystem-seitigen Features (z. B. `nofail`, `x-systemd.device-timeout`) |

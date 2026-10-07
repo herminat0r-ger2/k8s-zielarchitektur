@@ -3,8 +3,8 @@
 Anforderung, Mechanik und Entscheidungen für die **sofortige Übernahme durch Standort B**.
 Dieses Dokument gehört zur Hauptarchitektur (nicht zum Backup-Konzept) — Backup ist das Sicherheitsnetz gegen Datenverlust, **kein Übernahme-Pfad**.
 
-> **Status (revidiert 2026-10-07).** Die Topologie-Entscheidung lautet **gestreckter Proxmox-Cluster** auf dem externen Metro-Storage (HPE Alletra B10000) — siehe **§8**.
-> Die Abschnitte **§5** und **§7** beschreiben den **externen Witness** für die damit **verworfene** Variante *getrennter* Cluster; im gestreckten Cluster übernimmt der **Corosync-QDevice** die Rolle der dritten Stimme (§9.5).
+> **Status (revidiert 2026-10-07).** Es gibt **drei** Proxmox-Cluster: je einen eigenständigen in Standort A und in Standort B (lokaler Alletra-Storage, **kein** Sync zwischen den Systemen) **plus** einen **gestreckten** Cluster über beide Standorte auf dem Alletra-Metro-Paar — siehe **§8**.
+> Der gestreckte Cluster kommt **zusätzlich** zu den beiden standorteigenen Clustern, nicht statt ihrer. Für ihn ist die dritte Stimme der **Corosync-QDevice** (§9.5); die Abschnitte **§5** und **§7** beschreiben den **externen Witness** als Beobachter über getrennte Cluster — das ist nicht mehr der Steuerungspfad, die Down-Detection-Checkliste bleibt als Monitoring nützlich.
 > Die Mechanik von Split-Brain und Failover (§4, §6) gilt unverändert.
 
 ## 1. Anforderung (verbindlich)
@@ -16,16 +16,20 @@ Standort B übernimmt **immer sofort** — als Hot Standby oder Active/Active. E
 | automatisch (Hot Standby) | CloudNativePG / Patroni / Witness-gesteuerter VM-Start | Sekunden–Minuten |
 | manuell per Runbook | Replica läuft in B, Promotion per Runbook | Minuten (RTO = Mensch) |
 
+**Topologie (drei Cluster).** In Standort A und B läuft je ein **eigenständiger** Proxmox-Cluster auf dem lokalen Alletra-Storage (kein Storage-Sync zwischen den Systemen); darin lebt je ein Kubernetes-Cluster, dessen DBs per **CloudNativePG** zur Gegenseite replizieren. **Zusätzlich** läuft ein **gestreckter** Proxmox-Cluster über beide Standorte auf dem Alletra-Metro-Paar; er trägt VMs und einen weiteren Kubernetes-Cluster. Die Übernahme-Anforderung oben gilt für **beide** Formen.
+
 ## 2. Heutiges Verhalten (vSphere-Stretched-Cluster) als Referenz
 
 vSphere HA startet bei Ausfall von Standort A die VMs auf Hosts in B **neu** (Restart, keine Live-Migration). Daten sind da, weil der Storage synchron gespiegelt ist. **RPO ≈ 0, RTO = Boot + Recovery.** Es ist ein Neustart-Szenario — keine unterbrechungsfreie Übernahme, DBs machen beim Start Crash-Recovery.
 
-## 3. Zwei Failover-Ebenen
+## 3. Failover-Ebenen
 
 | Ebene | Mechanismus | Konfiguration |
 |---|---|---|
-| Node-Failover (Host in A stirbt) | Proxmox HA (`ha-manager`) | Einstellung, kein Skript |
-| Standort-Failover (ganzes DC A down) | Alletra-Metro (Daten liegen synchron in B) + Start der VMs in B | Failover-Skript/Runbook + Down-Detection nötig |
+| Node-Failover (Host stirbt) | Proxmox HA (`ha-manager`) | Einstellung, kein Skript |
+| Standortausfall, **lokale** Cluster | Der Cluster der Gegenseite läuft unverändert weiter; DB-Promotion per CloudNativePG bzw. Patroni | Runbook — kein Cluster-Failover nötig |
+| Standortausfall, **gestreckter** Cluster | Alletra-Metro (Daten liegen synchron im Rest-Standort) + Start der VMs dort | Runbook + Down-Detection, QDevice-Freigabe abwarten |
+| Standortausfall, **etcd** des gestreckten K8s-Clusters | etcd-VMs im Rest-Standort starten — bei Disk-Ablage *lokal* nur per Snapshot, bei *Metro-LUN* liegen die Daten bereits vor | Runbook (Ablage: offene Entscheidung) |
 
 ## 4. Split-Brain — das Kernproblem
 
@@ -35,7 +39,7 @@ Ohne Quorum weiß B nicht, ob A down ist oder nur der Link A–B. Falscher Autom
 
 ## 5. Der Witness (3. Instanz) — was er prüft
 
-> Gilt für die **verworfene** Variante getrennter Cluster. Im gestreckten Cluster ist die dritte Stimme der **Corosync-QDevice** (§9.5). Die Check-Matrix bleibt als **Monitoring-Checkliste** sinnvoll.
+> Konzept für eine **externe** dritte Instanz. Stand 2026-10-07: Der gestreckte Cluster nutzt dafür den **Corosync-QDevice** (§9.5); die beiden **lokalen** Cluster brauchen keine dritte Instanz, weil ihre Übernahme auf Anwendungsebene läuft (CloudNativePG/Patroni). Die Check-Matrix bleibt als **Monitoring-Checkliste** sinnvoll.
 
 **Der Witness prüft keine Anwendungen, keine einzelnen VMs und nicht "das iLO eines Servers".** Er prüft die Infrastruktur-Ebenen von Standort A, mehrfach, über einen unabhängigen Pfad:
 
@@ -61,9 +65,9 @@ Ohne Quorum weiß B nicht, ob A down ist oder nur der Link A–B. Falscher Autom
 2. **Quorum/Witness:** Automatischer Failover nur mit Bestätigung durch die 3. Instanz. A lebt + Link down → kein Failover. A wirklich down → B failovert.
 3. **Fencing bei Rückkehr:** A kommt nach Failover als Replica zurück (DBs: CloudNativePG/Patroni/DCS machen das automatisch). Legacy-VMs: Spiegel-Richtung umkehren (B → A), sonst überschreibt A den neueren Stand.
 
-## 7. Entscheidung (verworfen — galt für getrennte Cluster)
+## 7. Entscheidung: braucht es eine externe dritte Instanz?
 
-> Diese Abwägung gehört zur **verworfenen** Variante getrennter Cluster (siehe §8). Im gestreckten Cluster ist die dritte Stimme der **Corosync-QDevice** (§9.5).
+> Diese Abwägung betrifft den **externen Witness** (Beobachter über getrennte Cluster). Stand 2026-10-07: Der gestreckte Cluster nutzt stattdessen den **Corosync-QDevice** (§9.5); für die beiden lokalen Cluster ist keine dritte Instanz nötig — ihre Übernahme regelt CloudNativePG/Patroni.
 
 | Option | Konsequenz |
 |---|---|
@@ -74,7 +78,15 @@ Anforderung "B übernimmt sofort" → automatisch → **Witness aufnehmen** (Sta
 
 ## 8. Entscheidung: gestreckter Proxmox-Cluster (revidiert 2026-10-07)
 
-**Entscheidung.** Ein **gestreckter Proxmox-Cluster** über beide Standorte auf **einem gemeinsamen externen Shared Storage** (HPE Alletra MP B10000 als Metro-Cluster mit Peer Persistence). Die frühere Fassung dieses Abschnitts ("Warum KEIN gestreckter Proxmox-Cluster", getrennte Cluster je Standort + externer Witness) ist damit **verworfen**.
+**Entscheidung.** Es gibt **drei** Proxmox-Cluster:
+
+| Cluster | Standort | Storage | Anmerkung |
+|---|---|---|---|
+| Proxmox-Cluster A | nur A | Alletra A, LUNs *lokal-only* | eigenes Quorum, nicht gestreckt |
+| Proxmox-Cluster B | nur B | Alletra B, LUNs *lokal-only* | eigenes Quorum, nicht gestreckt |
+| **Gestreckter Cluster** | A + B | Alletra-Metro-Paar (synchron) | VMs **und** ein Kubernetes-Cluster |
+
+Die frühere Fassung dieses Abschnitts ("Warum KEIN gestreckter Proxmox-Cluster") ist damit **überholt** — aber nicht in ihr Gegenteil verkehrt: Der gestreckte Cluster kommt **zusätzlich** zu den beiden standorteigenen Clustern, **nicht statt** ihrer. Die lokalen Cluster tragen die Workloads, die keinen Metro-Storage brauchen; der gestreckte Cluster trägt die, die ihn brauchen.
 
 ### 8.1 Warum die frühere Begründung nicht mehr trägt
 
@@ -115,7 +127,7 @@ Das offizielle Node-Limit ist ohnehin keines: *"There's no explicit limit for th
 
 - **§3 (Failover-Ebenen)** gilt unverändert.
 - **§4 (Split-Brain)** gilt unverändert — die Storage-Ebene beantwortet jetzt das Array, die Cluster- und Anwendungsebene weiterhin das Quorum.
-- **§5 und §7** beschreiben den **externen Witness** für die verworfene Variante. Im gestreckten Cluster ist die dritte Stimme der **Corosync-QDevice** — bewusst ein anderes Konstrukt: eine Quorum-Stimme *innerhalb* eines Clusters, kein Beobachter getrennter Cluster.
+- **§5 und §7** beschreiben den **externen Witness** als Beobachter über getrennte Cluster. Für den **gestreckten** Cluster ist die dritte Stimme der **Corosync-QDevice** — bewusst ein anderes Konstrukt: eine Quorum-Stimme *innerhalb* eines Clusters. Für die **lokalen** Cluster ist weder Witness noch QDevice nötig: sie haben je ihr eigenes Quorum, und die Übernahme passiert auf Anwendungsebene (CloudNativePG/Patroni).
 
 ## 9. Corosync-Betrieb im gestreckten Cluster (Auflagen)
 
