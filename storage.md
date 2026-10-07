@@ -7,7 +7,7 @@
 ## Inhaltsverzeichnis
 
 1. [Rahmenbedingungen des Setups](#1-rahmenbedingungen-des-setups)
-2. [Alle relevanten Proxmox Storage-Typen](#2-alle-relevanten-proxmox-storage-typen) — inkl. [2.4 NVMe-oF im Detail](#24-nvme-of-im-detail--die-transporte)
+2. [Alle relevanten Proxmox Storage-Typen](#2-alle-relevanten-proxmox-storage-typen) — inkl. [2.4 NVMe-oF im Detail](#24-nvme-of-im-detail--die-transporte) und [2.5 Thin Provisioning](#25-thin-provisioning--auf-welcher-schicht-entsteht-es)
 4. [Detaillierte Analyse](#4-detaillierte-analyse-der-relevanten-optionen) — inkl. [4.1.1 Einbindung in Proxmox](#411-einbindung-in-proxmox-ve) und [4.1.2 Metro-Paar-Fallstrick](#412-der-metro-paar-fallstrick)
 3. [Bewertungstabelle Enterprise-Stretched-Cluster](#3-bewertungstabelle-enterprise-stretched-cluster)
 4. [Detaillierte Analyse der relevanten Optionen](#4-detaillierte-analyse-der-relevanten-optionen)
@@ -57,6 +57,29 @@
 ### 2.3 Spezial
 
 - **Proxmox Backup Server (PBS)** – nur für Backups, nicht für Live-VM-Disks
+
+### 2.5 Thin Provisioning — auf welcher Schicht entsteht es?
+
+**Thin Provisioning ist keine Dateisystem-Eigenschaft**, sondern eine Eigenschaft *jeder Schicht* im Pfad. Die Proxmox-Doku formuliert die Regel:
+
+> "All storage types which have the 'Snapshots' feature also support thin provisioning." *(Admin Guide, Thin Provisioning)*
+
+Vier Orte, an denen „dünn" entstehen kann:
+
+| Schicht | Was dort dünn ist | Anmerkung |
+|---|---|---|
+| **1. Array** | das LUN selbst (Alletra Thin Provisioning) | **Der wichtigste Hebel in diesem Setup** — wirkt unabhängig davon, was der Host darüber macht |
+| **2. Volume-Manager im Host** | LVM-**thin**-Pool (dm-thin): Overcommit + Snapshots | ⚠️ **Proxmox führt `lvmthin` ausdrücklich NICHT als shared Storage** (Feature-Matrix: *Shared = no*) → nur für lokale/standortgebundene Pools |
+| **3. Datei-Ebene** | qcow2 (immer dünn), Sparse-Dateien auf ext4/XFS/Btrfs/ZFS | gilt für `dir`, `nfs`, `cifs`, `cephfs` |
+| **4. Pool-Dateisystem** | ZFS-zvols (dünn, solange ohne Reservierung), Ceph RBD (immer dünn) | ZFS: `refreservation=none` = dünn, `refreservation=<size>` = dick |
+
+**Konsequenz für die geplante Architektur:**
+
+- Auf dem **gemeinsamen Metro-LUN** kommt die Dünnheit aus der **Array** (dünnes LUN). Im Host läuft dann **LVM (thick)** auf dem Multipath-Device und der Storage wird als *shared* markiert — weil `lvmthin` als shared nicht unterstützt wird (siehe [4.1](#41-nvme-of--fc--iscsi--lvm-auf-hpe-alletra-b10000-klare-empfehlung)).
+- Für **lokale** Pools (standortgebundene VMs) sind LVM-thin oder ZFS die Thin-Optionen, jeweils mit Snapshots.
+- **Overcommit ist ein echtes Risiko:** Läuft der Storage voll, bekommen **alle** Gäste I/O-Fehler und Dateisysteme können inkonsistent werden (Caution-Abschnitt der Doku) → Überprovisionierung nur mit Monitoring und Schwellwerten.
+
+*Quelle: Proxmox VE Admin Guide, Kapitel 7 — Storage Types (Feature-Matrix) und Thin Provisioning.*
 
 ### 2.4 NVMe-oF im Detail — die Transporte
 
@@ -113,20 +136,22 @@
 **Szenario:** HPE Alletra B10000 + PBS
 
 **Bewertungskriterien:** 1–10, höher = besser, unter Berücksichtigung des Szenarios.
+**Reihenfolge:** absteigend nach *Gesamt-Eignung im Ziel-Szenario* — nicht nach Performance. Betriebsrisiko und Passung zur geplanten **Doppelnutzung der Arrays** (lokale *und* Metro-LUNs auf denselben Systemen) zählen gleichwertig mit. Wo eine Zeile fehlt (etwa „NVMe-oF/RDMA"), bietet die B10000 sie nicht an — siehe [2.4](#24-nvme-of-im-detail--die-transporte).
 
 | Storage-Typ | Shared / Metro geeignet | Snapshots (Proxmox) | Performance | Komplexität | HA / Live-Migration | Resilienz bei Netzfehlern (Linux-VMs) | PBS-Integration | Gesamt-Eignung Enterprise Stretched | Empfehlung für dein Setup |
 |---|---|---|---|---|---|---|---|---|---|
-| **iSCSI + LVM (Thick)** | 10 (Alletra nativ) | 4–7 ¹ | 9 | 6 | 10 | **9–10** (Multipath) | 8 | **9.5** | **Primär empfohlen** |
 | **NVMe-oF/FC + LVM** | 10 | 4–7 ¹ | **10** | 6 | 10 | **10** (natives Multipath) | 8 | **9.7** | **Beste Performance** (HBA-Offload, bis 12 Ports/Node) |
-| **NVMe-oF/TCP + LVM** | 10 | 4–7 ¹ | 9.5 | **5** | 10 | **9.5** (natives Multipath) | 8 | **9.4** | Ohne FC-Fabric — Ethernet, mehr Host-CPU, 0–2 Ports/Node ³ |
+| **iSCSI + LVM (Thick)** | 10 (Alletra nativ) | 4–7 ¹ | 9 | 6 | 10 | **9–10** (Multipath) | 8 | **9.5** | **Primär empfohlen** — robusteste Variante bei zwei LUN-Klassen ⁴ |
 | **FC + LVM** | 10 | 4–7 ¹ | 9.5 | 6 | 10 | **9–10** | 8 | **9.5** | Sehr gut |
+| **NVMe-oF/TCP + LVM** | 10 | 4–7 ¹ | 9.5 | **5** | 10 | **9.5** (natives Multipath) | 8 | **9.4** | Ohne FC-Fabric — Ethernet, mehr Host-CPU, 0–2 Ports/Node ³ |
 | **NFS (Alletra File)** | 9 | 6–8 ² | 7–8 | **3** | 9 | 6–7 (weniger robust bei Path-Fail) | 9 | 7.5 | Gut für ISO/Templates |
-| **Ceph RBD** | 8 (eigene Stretch-Mode) | **10** | 8–9 | 8–9 | 10 | 8 (eigene Replikation) | 9 | 7–8 | Nur wenn Hyperconverged |
-| **ZFS lokal + Replication** | 3 | **10** | **9–10** | 5 | 4 (async) | 5 (kein Shared) | **10** | 5 | Nur ergänzend |
-| **LVM-Thin lokal** | 1 | 9 | 9 | 3 | 1 | 3 | 8 | 3 | Nicht für HA |
-| **Directory / CIFS** | 2–7 | 5–7 | 5–7 | 2 | 2–7 | 4–6 | 9 | 4 | Nur ISO/Backup |
-| **CephFS** | 8 | 9 | 7 | 8 | 9 | 7 | 8 | 6.5 | Optional File |
 | **ZFS over iSCSI** | 9 | **10** | 8 | 8 | 9 | 7–8 | 8 | 7.5 | Möglich, aber komplex |
+| **Ceph RBD** | 8 (eigene Stretch-Mode) | **10** | 8–9 | 8–9 | 10 | 8 (eigene Replikation) | 9 | 7–8 | Nur wenn Hyperconverged |
+| **CephFS** | 8 | 9 | 7 | 8 | 9 | 7 | 8 | 6.5 | Optional File |
+| **ZFS lokal + Replication** | 3 | **10** | **9–10** | 5 | 4 (async) | 5 (kein Shared) | **10** | 5 | Nur ergänzend |
+| **Directory / CIFS** | 2–7 | 5–7 | 5–7 | 2 | 2–7 | 4–6 | 9 | 4 | Nur ISO/Backup |
+| **LVM-Thin lokal** | 1 | 9 | 9 | 3 | 1 | 3 | 8 | 3 | Nicht für HA — `lvmthin` ist **kein** shared Storage |
+| **ZFS auf Shared-LUN** (NVMe-oF/iSCSI-LUN + `zpool`) | 1 | 10 | **9** | 6 | **1** | 3 | **10** | **2** | **Nein** — ZFS ist nicht cluster-aware, siehe [4.4](#44-zfs-lokal--replication--und-warum-nvme-of--zfs-kein-shared-storage-ist) |
 | **PBS** | ja (Backup) | n/a | – | 3 | n/a | n/a | **10** | n/a | **Obligatorisch** |
 
 **Legende:**
@@ -134,6 +159,7 @@
 - ¹ Mit neueren Proxmox-Versionen (Volume Chains / qcow2-on-LVM) besser; ansonsten Array-Snapshots (Alletra) nutzen.
 - ² qcow2 oder Array-seitige Snapshots.
 - ³ Nur 0–2 Ethernet-Host-Ports pro Node (10/25 GbE bzw. 100 GbE), mehr Host-CPU-Last als FC **und** der NQN-Fallstrick bei zwei LUN-Klassen auf denselben Arrays — siehe [4.1.2](#412-der-metro-paar-fallstrick). **NVMe/RDMA (RoCE) bietet die B10000 nicht.**
+- ⁴ **Warum iSCSI (9,5) knapp vor NVMe/TCP (9,4) steht**, obwohl NVMe/TCP die bessere Latenz und nativen Multipath hat: Auf der B10000 teilen sich beide **dieselben 0–2 Ethernet-Ports pro Node** (kein Port-Vorteil), und der **NQN/NDSID-Fallstrick tritt nur bei NVMe auf** — bei zwei LUN-Klassen auf denselben Arrays ist iSCSI das risikoärmere Protokoll. Wer den Fallstrick sauber löst (getrennte Port-Sets/NQNs, Test nach [4.1.2](#412-der-metro-paar-fallstrick)), fährt mit NVMe/TCP technisch besser. Der Abstand ist bewusst klein — begründete Abwägung, keine Messung.
 
 ---
 
@@ -219,10 +245,13 @@ Ein Proxmox-Forum-Fall (PVE 9.2, **zwei aktiv-aktiv gespiegelte HPE-Alletra-Arra
 - Bei < 5 ms machbar, aber du hast bereits eine teure Enterprise-Array → doppelter Aufwand und Ressourcenverbrauch unnötig.
 - Nur sinnvoll, wenn du hyperconverged ohne externe Array willst.
 
-### 4.4 ZFS lokal + Replication
+### 4.4 ZFS lokal + Replication — und warum „NVMe-oF + ZFS" kein Shared Storage ist
 
 - Exzellente Performance und Datenintegrität, aber **kein** echtes Shared Storage → Live-Migration nur mit Downtime oder nach Replikation.
 - Gut als lokaler Cache oder für besonders I/O-intensive VMs + PBS-Replikation.
+- **„NVMe-oF + ZFS" funktioniert technisch** — `zpool create` auf einem NVMe-oF-Namespace, darüber der Proxmox-Typ `zfspool` — **ist aber kein HA-Storage:** ZFS ist **nicht cluster-aware**. Ein Pool auf einem *geteilten* LUN lässt sich nur von **einem** Host importieren, die anderen sehen ihn nicht. Damit fallen Live-Migration und HA weg; es ist dieselbe Klasse wie „ZFS lokal" (in der Matrix als eigene Zeile „ZFS auf Shared-LUN", Gesamt-Eignung 2).
+- Der **einzige von Proxmox unterstützte** „ZFS auf Shared Storage"-Weg ist **ZFS over iSCSI**: Der Pool liegt auf einem *entfernten* ZFS-Host, der zvols exportiert; die Proxmox-Nodes konsumieren nur. Ein Pendant **„ZFS over NVMe-oF" gibt es als Storage-Typ nicht** — man müsste es von Hand bauen (zvol → `nvmet` am ZFS-Host → LVM am Konsumenten) und verlöre die Proxmox-Integration für Snapshots/Klone.
+- **Fazit:** ZFS gehört auf **lokale** NVMe (`zfspool`); der **geteilte** Block-Storage bleibt bei LVM auf dem Multipath-Device, mit Snapshots/Thin auf der Array.
 
 ### 4.5 Proxmox Backup Server
 
@@ -310,6 +339,19 @@ Kurz erklärt, was die im Dokument verwendeten Storage- und Cluster-Begriffe tec
 **Zwei-Node-Konstellation.** Für verlässliches Quorum braucht es eine ungerade Stimmenzahl — bei 2 Nodes übernimmt das der **Corosync-QDevice** (3. Vote). Davon zu unterscheiden ist der **externe Witness** aus `failover.md`: keine Quorum-Stimme *innerhalb* eines Clusters, sondern eine eigenständige externe Instanz mit eigener Check-Logik über die getrennten Cluster.
 
 > **Betriebsauflagen im gestreckten Cluster** — Latenz-Budget, Timeout-Formel (`token`/`consensus`) mit den 30/40/45/60-s-Schwellen, Link-Prioritäten und Corosync-QDevice: siehe [`failover.md`](failover.md) **§9**.
+
+### Schichten: LUN, Volume-Manager, Dateisystem
+
+**„LVM" ist kein Dateisystem**, sondern ein **Volume-Manager** (blockbasiert) — im ganzen Dokument ist es so gemeint. Das „+ LVM" in den Block-Optionen bezeichnet den **Proxmox-Storage-Typ** `lvm`/`lvmthin`; Proxmox legt die VM-Disk **roh** in ein Logical Volume, auf der VM-Disk liegt also *kein* Host-Dateisystem. Ein Dateisystem kommt erst bei File-Storages ins Spiel (`dir` mit ext4/XFS, `nfs`, `cifs`, `cephfs`) bzw. als Pool-Dateisystem (`ZFS`, `Btrfs`).
+
+| Schicht | Beispiele | Rolle |
+|---|---|---|
+| **Fabric** | LUN aus der Array, per iSCSI/FC/NVMe-oF | liefert das Blockgerät |
+| **Volume-Manager** | LVM, LVM-thin, ZFS-zpool (`zfspool`), Ceph RBD | zerlegt Blöcke, macht Snapshots und Dünnheit |
+| **Dateisystem (Host)** | ext4, XFS, Btrfs, ZFS | nur bei File-Storage |
+| **Dateisystem (Gast)** | das Dateisystem **der VM** | liegt im rohen LV oder in der qcow2-Datei |
+
+**Warum die Matrix auf LVM führt:** Bei geteiltem Block-Storage ist LVM der von Proxmox **unterstützte** Weg, ein LUN in einzelne VM-Disks zu zerlegen. Die Doku sagt das explizit: *„With iSCSI, FibreChannel (FC), or SAS block storage as shared storage in a cluster, **LVM is used to split the LUN into virtual disks**"* (Admin Guide, Fußnote zur Storage-Matrix). Die Alternativen (ZFS-Pool, LVM-thin) scheiden für **shared** aus — es ist keine Vorliebe für LVM, sondern eine Support-Grenze.
 
 ### Verwandte Begriffe (Kurzform)
 
