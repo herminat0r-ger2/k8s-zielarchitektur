@@ -206,6 +206,58 @@ pvecm nodes
 
 ---
 
+## 10. etcd-Topologie im Vergleich
+
+etcd ist ein Raft-Cluster: Ein Eintrag ist **committet**, wenn ihn die **Mehrheit** der Mitglieder hat (Quorum = ⌊n/2⌋+1 → bei 3 Mitgliedern 2, bei 5 Mitgliedern 3). Alles Folgende leitet sich daraus ab.
+
+### 10.1 Die Varianten
+
+| Variante | Mitglieder | Quorum | Write-Pfad | Standortausfall |
+|---|---|---|---|---|
+| **A** — alles an einem Standort, Disks **lokal** | 3 in A | 2 | rein lokal (schnellster Fall) | Control-Plane weg → **Restore** aus Snapshot (RPO = Snapshot-Alter) |
+| **B** — alles an einem Standort, Disks auf dem **Metro-LUN** | 3 in A | 2 | lokal + Metro-RTT (Disk-Spiegel) | Control-Plane weg → **Neustart** im Rest-Standort (RPO 0, RTO ≈ 1–3 min) |
+| **C** — **1+1+1** über drei Standorte | je 1 in A/B/C | 2 | lokal + RTT zu einem anderen Standort | **läuft weiter** (2 von 3 bleiben), RTO ≈ Sekunden |
+| **D** — **2+2+1** über drei Standorte | 2 in A, 2 in B, 1 in C | 3 | lokal + RTT (Mehrheit nicht mehr lokal) | **läuft weiter** (3 von 5 bleiben), RTO ≈ Sekunden |
+
+### 10.2 Den Metro-RTT bekommt man nicht weg
+
+Wer den Standortausfall ohne Restore und ohne Neustart überstehen will, zahlt die Metro-Latenz in **jedem** Write — nur an unterschiedlicher Stelle:
+
+- Variante **B**: über den **Disk**-Spiegel (der fsync wartet auf das Peer-Array)
+- Variante **C/D**: über das **Netz**-Quorum (der Commit wartet auf eine entfernte Mehrheit)
+- Variante **A**: gar nicht — deshalb die schnellste, aber sie verliert den Control-Plane-State beim Standortausfall.
+
+Nicht die Latenz des langsamsten Mitglieds zählt, sondern die **der Mehrheit**: Raft committet, sobald eine Mehrheit den Eintrag hat. Bei 3 Mitgliedern genügt dem Leader also **ein** weiterer Ack — ein entferntes Mitglied im Rückstand blockiert nicht, solange die Mehrheit lokal ist.
+
+### 10.3 Variante D (2+2+1) im Detail
+
+| Ausfall | Überlebende | Quorum 3 erreicht? | Folge |
+|---|---|---|---|
+| 1 Mitglied | 4 | ja | unauffällig |
+| 2 Mitglieder in verschiedenen Standorten | 3 | ja | unauffällig |
+| **Quorum-Standort C** | 4 (A + B) | ja | unauffällig — C ist **kein** SPOF, solange A und B stehen |
+| **Standort A komplett** | 2 (B) + 1 (C) = 3 | **ja** | Control-Plane **läuft weiter**; Leader-Wahl wenige Sekunden — aber genau am Quorum-Rand |
+| Standort A **plus** ein weiteres Mitglied | 2 | nein | Ausfall |
+| Standorte A **und** B | 1 (C) | nein | Ausfall |
+| Partition A↔B, C für beide erreichbar | — | nur eine Seite | **Kein Split-Brain**: die Seite, die C's Stimme erhält, hat Quorum, die andere bleibt stehen (Pre-Vote verhindert, dass die Minderheit den Leader stört) |
+| Partition A↔B, C unerreichbar | 2 + 2 | nein | Ausfall — C muss erreichbar sein |
+
+### 10.4 Betriebliche Konsequenzen von C und D
+
+- **Quorum-Rand nach dem Standortausfall:** Danach leben genau noch 3 von 5 (= Quorum) bzw. 2 von 3. Jeder weitere Ausfall ist ein Totalausfall → die verlorenen Mitglieder zügig ersetzen.
+- **Mitglieder ersetzen ist selbst ein Raft-Vorgang** und braucht Quorum. Richtige Reihenfolge: **erst** die toten Mitglieder entfernen (5 → 3, danach sinkt der Quorum-Bedarf auf 2 = Luft), **dann** Ersatz anfügen — möglichst als **Learner** (nicht stimmberechtigt) aufholen lassen, dann promoten. Umgekehrt (erst hinzufügen) erhöht den Quorum-Bedarf genau in der kritischen Phase.
+- **Der Quorum-Standort braucht echte SSD-I/O:** jedes Mitglied hält eine vollständige Kopie und macht eigene fsyncs. Ein „Witness-VMchen" ohne ordentliche Disk wird zum schwächsten Glied.
+- **Der Metro-Link trägt mehr:** zusätzlich zu Storage-Spiegel und Corosync jetzt auch Raft-Verkehr → QoS, getrennte VLANs einplanen.
+- **Latenz-Tuning:** bei gestreckten Raft-Gruppen sind Heartbeat-/Election-Timeouts anzupassen — zu knapp erzeugt Scheinwahlen bei Jitter, zu groß macht die Fehlererkennung träge.
+- **C ist doppelt belegt:** dort läuft ohnehin der Corosync-QDevice des gestreckten Proxmox-Clusters. Fällt C aus, verliert der Proxmox-Cluster zugleich seinen Tie-Breaker (kein automatischer VM-Start), auch wenn etcd Variante D das überlebt.
+
+### 10.5 Empfehlung
+
+- **Nur wenn der Kubernetes-Control-Plane einen Standortausfall OHNE Neustart überstehen muss**, lohnen C oder D. **1+1+1** (C) ist der kleinste Eingriff mit demselben Standort-Schutz wie **2+2+1** (D); D verkraftet zusätzlich einen weiteren Mitgliedsausfall, kostet aber mehr Betriebsarbeit.
+- **Reicht ein Neustart von 1–3 Minuten** — genau das, was der gestreckte Proxmox-Cluster für VMs ohnehin tut —, ist **Variante B** die einfachste und im Normalbetrieb schnellste Lösung mit RPO 0. Die Applikations-DBs übernehmen weiterhin *sofort* über CloudNativePG/Patroni; deren RTO hängt nicht an etcd.
+- **Variante A** nur, wenn ein Control-Plane-Restore aus Snapshot akzeptiert ist.
+- In jedem Fall für A und B: **alle Mitglieder an EINEM Standort.** Mitglieder über zwei Standorte *ohne* dritten Standort zu verteilen (z. B. 2+1) ist die eigentliche Quorum-Falle und in keiner Variante sinnvoll.
+
 ## Quellen (Proxmox-Doku)
 
 - Proxmox VE Administration Guide, Kapitel 5 — *Cluster Manager*: `pvecm_cluster_network_requirements`, `pvecm_redundancy`, `pvecm_changing_token_coefficient`, `_corosync_external_vote_support`

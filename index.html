@@ -260,11 +260,11 @@
         <text x="50" y="1448" fill="#94a3b8" font-size="8">  über den Metro-Link, kein Split-Brain-Risiko</text>
         <rect x="745" y="1220" width="685" height="260" rx="8" fill="#0f172a"/>
         <rect x="745" y="1220" width="685" height="260" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="765" y="1244" fill="#fbbf24" font-size="11" font-weight="600">etcd — Platzierung (offene Entscheidung)</text>
+        <a href="https://github.com/herminat0r-ger2/k8s-zielarchitektur/blob/main/failover.md#10-etcd-topologie-im-vergleich" target="_blank"><text x="765" y="1244" fill="#fbbf24" font-size="11" font-weight="600">etcd — Platzierung · Varianten-Vergleich im Detail ↗ §10</text></a>
         <text x="765" y="1268" fill="#34d399" font-size="8">• etcd ist KEIN Single-Server: 3 Mitglieder (toleriert 1 Ausfall) bzw.</text>
         <text x="765" y="1283" fill="#34d399" font-size="8">  5 (toleriert 2) — immer ungerade, jedes Mitglied auf eigenem Host</text>
-        <text x="765" y="1298" fill="#34d399" font-size="8">• Raft: jeder Write braucht die Mehrheit → die Schreiblatenz hängt</text>
-        <text x="765" y="1313" fill="#34d399" font-size="8">  am langsamsten Mitglied. Ein einzelner etcd = kein HA, kein DR</text>
+        <text x="765" y="1298" fill="#34d399" font-size="8">• Raft: committet ist ein Write, wenn ihn die MEHRHEIT hat → die Latenz</text>
+        <text x="765" y="1313" fill="#34d399" font-size="8">  hängt an dieser Mehrheit, nicht am langsamsten Einzelmitglied</text>
         <text x="765" y="1328" fill="#fb7185" font-size="8">• Mitglieder über beide Standorte verteilt = Quorum-Falle</text>
         <text x="765" y="1343" fill="#fb7185" font-size="8">  (2+1 aufgeteilt: stirbt die 2er-Seite, ist der Cluster offline)</text>
         <text x="765" y="1358" fill="#34d399" font-size="8">• Empfehlung: ALLE Mitglieder an EINEM Standort → Quorum bleibt sicher</text>
