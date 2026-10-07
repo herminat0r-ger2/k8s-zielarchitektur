@@ -258,7 +258,37 @@ Nicht die Latenz des langsamsten Mitglieds zählt, sondern die **der Mehrheit**:
 - **Variante A** nur, wenn ein Control-Plane-Restore aus Snapshot akzeptiert ist.
 - In jedem Fall für A und B: **alle Mitglieder an EINEM Standort.** Mitglieder über zwei Standorte *ohne* dritten Standort zu verteilen (z. B. 2+1) ist die eigentliche Quorum-Falle und in keiner Variante sinnvoll.
 
+### 10.6 Warum nicht 3+3+1 (7 Mitglieder)?
+
+Bei 7 Mitgliedern ist das Quorum 4, toleriert sind 3 Ausfälle. Das klingt nach mehr Sicherheit — ist es aber nur in einem einzigen Fall, und man bezahlt es bei **jedem** Write.
+
+| Layout | n | Quorum | toleriert | nach Verlust von Standort A übrig | überlebt? | Reserve |
+|---|---|---|---|---|---|---|
+| 3+0 (alles in A) | 3 | 2 | 1 | 0 | nein | −2 |
+| 1+1+1 | 3 | 2 | 1 | 2 | ja | **0** |
+| 2+2+1 | 5 | 3 | 2 | 3 | ja | **0** |
+| **3+3+1** | 7 | 4 | 3 | 4 | ja | **0** |
+| 4+2+1 (unsymmetrisch) | 7 | 4 | 3 | 3 | **nein** | −1 |
+
+**Die Reserve nach einem Standortverlust ist immer 0** — und das ist strukturell, nicht eine Eigenheit von 2+2+1: Damit ein Standortverlust überhaupt überlebt wird, darf ein Standort höchstens `n − Quorum` = (n−1)/2 Mitglieder halten. Dann bleiben exakt Quorum viele Mitglieder übrig. Reserve nach dem Standortverlust gäbe es erst mit **drei gleichwertigen Daten-Standorten** (z. B. 3+3+3 = 9 Mitglieder, Quorum 5 → 6 überleben) — jenseits dessen, was etcd empfiehlt.
+
+**Was 3+3+1 zusätzlich kostet** (alles aus der etcd-Dokumentation):
+
+- **Der Commit wartet auf das 4.-schnellste Ack von 7** (bei 5 Mitgliedern auf das 3.-, bei 3 auf das 2.-schnellste). Mehr Mitglieder im Quorum = höhere Wahrscheinlichkeit, dass ein langsames Mitglied im Quorum liegt → schlechtere p99-Commit-Latenz.
+- **Auf dem Write-Pfad bringt es nichts:** 2+2+1 und 3+3+1 brauchen beide genau **ein entferntes Ack** (Leader in A: 2 von 5 bzw. 3 von 7 reichen lokal). Der Metro-RTT ist in beiden Varianten im Pfad.
+- **Daten werden an ALLE Peers repliziert:** „cluster data must be replicated across all peers, so there will be bandwidth cost as well" (etcd-FAQ). Drei entfernte Mitglieder statt zwei = 50 % mehr Raft-Streams über einen Metro-Link, der bereits Storage-Spiegel und Corosync trägt.
+- **Offizielle Grenze:** „… an etcd cluster probably should have no more than seven nodes. Google Chubby … suggests running five nodes. A 5-member etcd cluster can tolerate two member failures, which is enough in most cases. Although larger clusters provide better fault tolerance, **the write performance suffers because data must be replicated across more machines**." (etcd-FAQ, *What is maximum cluster size?*)
+- **Wahlen brauchen 4 Stimmen** statt 3 → mehr Mitglieder zu erreichen, und über Standortgrenzen langsamer.
+- Sieben vollständige Kopien mit eigenem fsync, eigener Defragmentierung und Snapshot-Pflicht.
+- **Kein Read-Skalierungsgewinn:** linearisierbare Reads laufen ohnehin über den Leader.
+
+**4+2+1 ist keine Option:** Standort A hielte 4 Mitglieder, toleriert sind aber nur 3 → **der Verlust von A reißt das Quorum.** Faustregel: ein Standort darf höchstens (n−1)/2 Mitglieder halten, sonst wird sein Verlust fatal.
+
+**Fazit.** 3+3+1 gewinnt genau einen Fall — **drei gleichzeitige Mitgliedsausfälle, während beide Standorte gesund sind**. Die Standortverlust-Sicherheit ist mit 2+2+1 (oder 1+1+1) **identisch**. Bleib bei **5 oder 3 Mitgliedern**; der Hebel für mehr Betriebssicherheit ist nicht die Mitgliederzahl, sondern **schneller Mitgliederersatz** — und zwar in der Reihenfolge aus 10.4: erst entfernen, dann als Learner hinzufügen (so verlangt es auch die etcd-FAQ: „When replacing an etcd node, it's important to remove the member first and then add its replacement").
+
+
 ## Quellen (Proxmox-Doku)
 
 - Proxmox VE Administration Guide, Kapitel 5 — *Cluster Manager*: `pvecm_cluster_network_requirements`, `pvecm_redundancy`, `pvecm_changing_token_coefficient`, `_corosync_external_vote_support`
 - Proxmox VE Wiki — *Cluster Manager*: Cluster Network, Corosync Redundancy, QDevice
+- etcd-Dokumentation — FAQ: *What is maximum cluster size?*, *Why an odd number of cluster members?*, *Does etcd work in cross-region or cross data center deployments?*, *Should I add a member before removing an unhealthy member?*, *Why does etcd lose its leader from disk latency spikes?* (https://etcd.io/docs/v3.6/faq/)
