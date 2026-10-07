@@ -81,6 +81,41 @@ Vier Orte, an denen „dünn" entstehen kann:
 
 *Quelle: Proxmox VE Admin Guide, Kapitel 7 — Storage Types (Feature-Matrix) und Thin Provisioning.*
 
+#### 2.5.1 Wie die Array selbst dünn macht (HPE Alletra B10000)
+
+**Dünnheit ist eine Eigenschaft des Volumens**, kein Schalter am LUN: ein **TPVV** (*Thin Provisioned Virtual Volume*) wird aus einer **CPG** (*Common Provisioning Group*, ein Pool aus Shared-LDs) versorgt. Auf der B10000 ist **TPVV der Default**; `full` ist die dickere Ausnahme, `-reduce` legt zusätzlich Dedup + Kompression an:
+
+```bash
+createvv -tpvv -usr_aw 50 -usr_al 75 cpg1 tpvv1 10G   # thin; Warnung ab 50 %, Limit bei 75 % der VSize
+createvv -tpvv -minalloc 2048 cpg2 tpvv1 1g            # Mindest-Allokationsgröße 2 GB
+createvv -reduce cpg2 vv1 16g                          # thin + Dedup + Kompression
+```
+
+**Platzvergabe:** Der Host sieht die volle *virtuelle* Größe (VSize); physischer Platz kommt **beim ersten Schreiben** aus der CPG, in Allokationsblöcken. Die Array alloziert dabei absichtlich etwas mehr als akut gebraucht wird — HPE nennt als Grund, I/O-Verzögerungen durch Volumen-Wachstum zu vermeiden — deshalb ist `Tot_Rsvd` > `Used`. Beispiel aus der HPE-Doku: VSize 1,5 TB, `Used` 25 GB (1,6 %), `Tot_Rsvd` 29 GB.
+
+**Dem Host sagen, dass es dünn ist:** die Array setzt das **TPE-Bit** (*Thin Provisioning Enabled*) in `READ CAPACITY (16)` — HPE nennt das *TP LUN Reporting*; erst dadurch sendet ein Host überhaupt `UNMAP`. Das Überschreiten der Schwellen meldet sie über die *Thin Provisioning Soft Threshold Reached* Check Condition.
+
+**Reclaim — die Kette muss durchgereicht werden:**
+
+```
+Gast-FS (fstrim/TRIM) → virtio-scsi (PVE-Disk-Option discard) → QEMU sendet Discard auf das LV
+  → Block-Layer → SCSI: UNMAP   |   NVMe: DSM Deallocate   → Array gibt Blöcke an die CPG zurück
+```
+
+Drei Punkte, die dabei überraschen:
+
+- **Es ist nicht sofort.** HPE: *„The space-reclaim and defrag operations automatically throttle and run at different time intervals in the system, reclaiming space over an interval of time and **not** after receiving the `UNMAP` command."* Nach einem großen Löschen steigt die freie Kapazität also **schrittweise** über einen Zeitraum.
+- **Bei SCSI ist `WRITE SAME (16)` die bevorzugte Variante** — HPE: *„the preferred command due to guaranteed zeroing of the blocks."*
+- **`Used` ≠ `df -k`** im Gast — Fragmentierung und Inode-Tabelle (HPE-Doku explizit).
+
+**⚠️ NVMe-Deallocate: Größen- und Firmwarelimit** (HPE Advisory a00150116): Deallocate über FC-NVMe und NVMe/TCP wird unterstützt. Bis **10.5.x** gab es **kein Limit** für die Request-Größe — Hosts sendeten teils ≥ 2 GB pro Request und liefen in **Timeouts**. Ab 10.5.x kündigt die Array im NVMe-Identify **max. 32 MB pro Deallocate-Request** an; größere Requests werden **abgelehnt**, und der Platz bleibt *„stranded within the current namespace"* — für dieses Volume noch nutzbar, aber **nicht an andere Volumes vergebbar** → schleichend steigende Auslastung. Betroffen war ESXi 7.x/8.x über FC-NVMe/NVMe/TCP (dort manuelle Host-Parameter nötig); **behoben in 10.5.50**. Konsequenz: **Firmware ≥ 10.5.50** fahren und die Reclaim-Wirkung einmal real nachmessen (große Datei schreiben → löschen → `showvv -s` über die nächsten Intervalle beobachten).
+
+**Monitoring:** `showvv -s <VV>` zeigt je Volume `Usr Used`, `%VSize`, `Tot_Rsvd` (real alloziert) und den `Snap`-Anteil. Zu beobachten sind **Volume-`Used`**, die **CPG**-Auslastung und bei Snapshots der Snapshot-Anteil. Die Proxmox-Belegung allein sagt über die Pool-Auslastung **nichts**.
+
+**Host-Schritt in Proxmox:** Auf jeder VM-Disk die **`discard`-Option** setzen (Admin Guide, Trim/Discard: *„You only need to ensure that the Virtual Machines enable the disk discard option."*). Fehlt sie, wächst das dünne LUN nur noch — der Array-Vorteil verpufft still.
+
+**Kontext:** In der bestehenden VMware-Umgebung läuft genau diese Kombination — **TPVV + Metro/Peer Persistence auf Primera** — bereits produktiv. Die Array-Seite ist damit bewährt und die Bedienung ist dieselbe Linie: die B10000-CLI führt die 3PAR/Primera-Befehle und -Rollen weiter (`createvv -tpvv`, `showvv -s`, CPG-Konzepte). Neu ist also **nicht** die Array-Mechanik, sondern der **Host-Pfad**: ESXi schließt die Reclaim-Kette heute selbst (VAAI UNMAP, inkl. der in a00150116 genannten Host-Parameter), unter Proxmox muss sie explizit aufgebaut werden (Gast-TRIM → `discard`-Option → UNMAP/Deallocate).
+
 ### 2.4 NVMe-oF im Detail — die Transporte
 
 **Der entscheidende Punkt zuerst:** NVMe-oF ist *ein* Protokoll mit mehreren Transport-Bindings — welche man nutzen kann, entscheidet **die Array**, nicht der Host. Für die HPE Alletra Storage MP B10000 sind laut HPE-QuickSpecs **Fibre Channel, NVMe-oF/FC, NVMe-oF/TCP und iSCSI** dokumentiert. **NVMe/RDMA (RoCE) ist nicht dabei.** Die Wahl reduziert sich in diesem Setup also real auf **NVMe/FC vs. NVMe/TCP** (iSCSI als Fallback).
