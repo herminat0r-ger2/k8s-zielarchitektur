@@ -8,9 +8,8 @@
 
 1. [Rahmenbedingungen des Setups](#1-rahmenbedingungen-des-setups)
 2. [Alle relevanten Proxmox Storage-Typen](#2-alle-relevanten-proxmox-storage-typen) — inkl. [2.4 NVMe-oF im Detail](#24-nvme-of-im-detail--die-transporte) und [2.5 Thin Provisioning](#25-thin-provisioning--auf-welcher-schicht-entsteht-es)
-4. [Detaillierte Analyse](#4-detaillierte-analyse-der-relevanten-optionen) — inkl. [4.1.1 Einbindung in Proxmox](#411-einbindung-in-proxmox-ve) und [4.1.2 Metro-Paar-Fallstrick](#412-der-metro-paar-fallstrick)
 3. [Bewertungstabelle Enterprise-Stretched-Cluster](#3-bewertungstabelle-enterprise-stretched-cluster)
-4. [Detaillierte Analyse der relevanten Optionen](#4-detaillierte-analyse-der-relevanten-optionen)
+4. [Detaillierte Analyse der relevanten Optionen](#4-detaillierte-analyse-der-relevanten-optionen) — inkl. [4.1.1 Einbindung in Proxmox](#411-einbindung-in-proxmox-ve) und [4.1.2 Metro-Paar-Fallstrick](#412-der-metro-paar-fallstrick)
 5. [Empfohlenes Architektur-Setup](#5-empfohlenes-architektur-setup)
 6. [Resilienz-Maßnahmen für Linux-VMs bei Netzwerkfehlern](#6-resilienz-maßnahmen-für-linux-vms-bei-netzwerkfehlern)
 7. [Fazit](#7-fazit)
@@ -207,18 +206,26 @@ Drei Punkte, die dabei überraschen:
   - **NVMe/FC** = technisch stärkste Variante (HBA-Offload, bis 12 Ports/Node, etabliertes Zoning) — braucht ein FC-Fabric.
   - **NVMe/TCP** = nutzt die Ethernet-Infrastruktur, dafür Host-CPU-Last und nur 0–2 Ethernet-Ports/Node; bei zwei LUN-Klassen auf denselben Arrays ist der NQN-Fallstrick (4.1.2) Pflicht-Prüfpunkt.
   - **iSCSI/FC ohne NVMe** = gleichwertiger Fallback, wenn Kompatibilität wichtiger ist als Latenz.
-- Proxmox: Anbindung per CLI (`nvme-cli`, `nvme discover`/`connect`) → LVM-Volume-Group auf dem Multipath-Device → als **shared** markieren — Anleitung und Diagnose: [4.1.1](#411-einbindung-in-proxmox-ve).
+- Proxmox: **NVMe-oF** per CLI (`nvme-cli`), **iSCSI** über den Storage-Typ `iscsi` ([4.1.1](#411-einbindung-in-proxmox-ve)) → LVM-Volume-Group auf dem Multipath-Device → als **shared** markieren.
 
 #### 4.1.1 Einbindung in Proxmox VE
 
-Die Verbindung wird **am Host** aufgebaut (kein Storage-Typ in der GUI), danach wird das Device als LVM eingetragen:
+Zwei Wege — sie unterscheiden sich darin, **ob Proxmox das Protokoll selbst kennt**:
 
-Proxmox hat **keinen NVMe-oF-Storage-Typ in der GUI** — die Verbindung wird per CLI am Host aufgebaut, danach wird das Device als **LVM (shared)** eingetragen:
+| Transport | Proxmox-Storage-Typ | Wer baut die Verbindung auf? |
+|---|---|---|
+| **NVMe-oF/FC · NVMe/TCP** | **keiner** — CLI + LVM | `nvme-cli` am Host |
+| **iSCSI** | **`iscsi`** (GUI/CLI) | Proxmox (`open-iscsi`) |
+| **FC/SAS** | **keiner** — HBA + Zoning + LVM | Kernel/HBA |
+
+In beiden Fällen endet es gleich: LUN bzw. Multipath-Device → **LVM** → Proxmox-Storage als *shared*.
+
+**Track A — NVMe-oF (FC oder TCP):** Proxmox hat hier **keinen** Storage-Typ, die Verbindung entsteht per CLI am Host:
 
 ```bash
 apt update && apt -y install nvme-cli
 modprobe nvme_tcp
-echo "nvme_tcp" > /etc/modules-load.d/nvme_tcp.conf     # RDMA: Modul nvme_rdma
+echo "nvme_tcp" > /etc/modules-load.d/nvme_tcp.conf
 nvme discover -t tcp -a <array-ip> -s 4420
 nvme connect  -t tcp -n <nqn> -a <array-ip> -s 4420
 nvme list                       # -> /dev/nvmeXnY
@@ -236,6 +243,24 @@ nvme list-subsys       # Pfade je Subsystem (Multipath-Status)
 nvme list -v           # NQN, NDSID, Controller, Pfad-Zustand
 dmesg | grep -i nvme   # z. B. "IDs don't match for shared namespace"
 ```
+
+**Track B — iSCSI (Open-iSCSI):** hier kennt Proxmox das Protokoll selbst — Storage-Typ `iscsi`.
+
+```bash
+apt -y install open-iscsi                    # nicht vorinstalliert
+pvesm scan iscsi <portal-ip>                 # Ziele am Portal auflisten
+pvesm add iscsi <storage-id> --portal <portal-ip> --target <iqn> --content none
+```
+
+- **`content none` ist der entscheidende Teil.** Die Doku empfiehlt es ausdrücklich für den LVM-Fall: *„If you want to use LVM on top of iSCSI, it make sense to set content none. That way it is not possible to create VMs using iSCSI LUNs directly."* Auf `images` gestellt könnte PVE ein ganzes LUN an **eine** VM geben (LUN-direkt, ein LUN pro VM) — genau das, was den Shared-Fall kaputt macht.
+- Prinzipiell sagt die Doku dasselbe: *„iSCSI is a block level type storage, and provides no management interface. So it is usually best to **export one big LUN, and setup LVM on top of that LUN**."*
+- Der Typ `iscsi` allein kann **keine Snapshots und keine Klone**, Image-Format nur `raw` — deshalb liegt die Verwaltung bei LVM darüber (Shared = *yes*).
+- ⚠️ **Nicht `iscsidirect` (User-Mode) verwenden**, wenn LVM darüber soll: *„you cannot use LVM on top of such iSCSI LUN."* Dieses Backend ist nur für den LUN-direkt-Fall gedacht.
+- **Multipath:** bei iSCSI über `dm-multipath` (`multipath -ll`), anders als beim nativen NVMe-Multipath.
+- **Diagnose:** `iscsiadm -m discovery -t sendtargets -p <ip>:3260`, `iscsiadm -m node -l`, `iscsiadm -m session`; CHAP in der Storage-Definition bzw. im iSCSI-Knoten.
+- **LVM-Property `base`** — laut Doku: *„Base volume. This volume is automatically activated before accessing the storage. This is mostly useful when the LVM volume group resides on a remote iSCSI server."* Für ein VG auf einem iSCSI-LUN ist das der passende Hebel.
+
+**Snapshots auf LVM (PVE 9):** Der LVM-`snapshot-as-volume-chain`-Modus (*„vendor-agnostic support for snapshots on any storage system that supports block storage. This includes iSCSI and Fibre Channel-attached SANs"*) verlangt laut Doku **thin-provisioning *und* discard** im Unterbau und ist derzeit eine **Technologie-Vorschau**. → Für Snapshots auf dem Metro-LUN ist deshalb die dünne LUN-Klasse aus der Array die Voraussetzung, nicht nur „nice to have".
 
 #### 4.1.2 Der Metro-Paar-Fallstrick
 

@@ -152,6 +152,20 @@ Genau die Kombination aus dieser Checkliste (zwei LUN-Klassen auf aktiv-aktiv ge
 
 ### 4.3 Track B — iSCSI
 
+Hier kennt Proxmox das Protokoll selbst (Storage-Typ `iscsi`) — der native Weg:
+
+```bash
+apt -y install open-iscsi
+pvesm scan iscsi <portal-ip>                 # Ziele am Portal auflisten
+pvesm add iscsi <storage-id> --portal <portal-ip> --target <iqn> --content none
+```
+
+- [ ] ⚠️ **`content none`** setzen, wenn LVM darüber kommt — sonst könnte PVE ein ganzes LUN direkt an **eine** VM geben (LUN-direkt), und der Shared-Fall wäre kaputt (Doku-Tip zum `iscsi`-Backend).
+- [ ] ⚠️ **Nicht `iscsidirect` (User-Mode)** verwenden: dort gilt *zitat: you cannot use LVM on top of such iSCSI LUN*.
+- [ ] Der Typ `iscsi` allein kann **keine** Snapshots/Klone, Format nur `raw` → die Verwaltung liegt bei LVM darüber.
+
+Low-Level-Weg (manuelles Setup und Diagnose) über `iscsiadm`:
+
 ```bash
 iscsiadm -m discovery -t sendtargets -p <array-node-ip>:3260
 iscsiadm -m node -l
@@ -180,6 +194,7 @@ vgcreate vg_metro /dev/mapper/<mpath-device>
   - Content: *Disk image* (Snapshots optional); **keine** ISOs/Templates aufs Block-Storage
 - [ ] ⚠️ **LVM-thin (`lvmthin`) ist als shared Storage nicht unterstützt** (Proxmox Feature-Matrix: *Shared = no*). Für den gestreckten Cluster: **LVM (thick) auf dem Multipath-Device**, Thin kommt aus der **Array** (§2.5.1).
 - [ ] Verifizieren: `pvesm status` zeigt das Storage auf **allen** Nodes als `active`; auf einem Node eine Test-LV anlegen, auf einem anderen sichtbar.
+- [ ] Optional die LVM-Property **`base`** setzen (Doku: *volume that is automatically activated before accessing the storage — mostly useful when the LVM volume group resides on a remote iSCSI server*). Genau der Fall bei einem VG auf dem iSCSI-LUN.
 - [ ] Zweiten Storage-Eintrag für die **lokal-only**-Klasse (`vg_lokal_a`/`_b`) — **ohne** Shared, nur die Nodes des jeweiligen Clusters.
 
 ---
