@@ -3,654 +3,379 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>KRITIS Zielarchitektur — Proxmox + Kubernetes</title>
+  <title>KRITIS Zielarchitektur — 2 Standorte + gestreckter Cluster</title>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    body {
-      font-family: 'JetBrains Mono', monospace;
-      background: #020617;
-      min-height: 100vh;
-      padding: 2rem;
-      color: white;
-    }
-    .container {
-      max-width: 1450px;
-      margin: 0 auto;
-    }
-    .header {
-      margin-bottom: 2rem;
-    }
-    .header-row {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      margin-bottom: 0.5rem;
-    }
-    .pulse-dot {
-      width: 12px;
-      height: 12px;
-      background: #34d399;
-      border-radius: 50%;
-      animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      letter-spacing: -0.025em;
-    }
-    .subtitle {
-      color: #94a3b8;
-      font-size: 0.875rem;
-      margin-left: 1.75rem;
-    }
-    .diagram-container {
-      background: rgba(15, 23, 42, 0.5);
-      border-radius: 1rem;
-      border: 1px solid #1e293b;
-      padding: 1.5rem;
-      overflow-x: auto;
-    }
-    svg {
-      width: 100%;
-      min-width: 1100px;
-      display: block;
-    }
-    svg a text {
-      text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-    svg a:hover text {
-      fill: #22d3ee;
-    }
-    .cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1rem;
-      margin-top: 2rem;
-    }
-    .card {
-      background: rgba(15, 23, 42, 0.5);
-      border-radius: 0.75rem;
-      border: 1px solid #1e293b;
-      padding: 1.25rem;
-    }
-    .card-header {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-    }
-    .card-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-    .card-dot.cyan { background: #22d3ee; }
-    .card-dot.emerald { background: #34d399; }
-    .card-dot.violet { background: #a78bfa; }
-    .card-dot.amber { background: #fbbf24; }
-    .card-dot.rose { background: #fb7185; }
-    .card h3 {
-      font-size: 0.875rem;
-      font-weight: 600;
-    }
-    .card ul {
-      list-style: none;
-      color: #94a3b8;
-      font-size: 0.75rem;
-    }
-    .card li {
-      margin-bottom: 0.375rem;
-    }
-    .card li a {
-      color: #22d3ee;
-    }
-    .footer {
-      text-align: center;
-      margin-top: 1.5rem;
-      color: #475569;
-      font-size: 0.75rem;
-    }
-    .mode-menu {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-    }
-    .mode-label {
-      color: #94a3b8;
-      font-size: 0.8rem;
-      font-weight: 600;
-    }
-    .mode-btn {
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid #334155;
-      color: #94a3b8;
-      font-family: inherit;
-      font-size: 0.8rem;
-      padding: 0.5rem 1rem;
-      border-radius: 0.5rem;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .mode-btn:hover {
-      border-color: #22d3ee;
-      color: white;
-    }
-    .mode-btn.active {
-      border-color: #22d3ee;
-      background: rgba(8, 51, 68, 0.5);
-      color: white;
-      font-weight: 600;
-    }
-    .mode-banner {
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid #334155;
-      border-left: 3px solid #22d3ee;
-      border-radius: 0.5rem;
-      padding: 0.6rem 1rem;
-      margin-bottom: 1rem;
-      color: #94a3b8;
-      font-size: 0.8rem;
-    }
-    .mode-banner strong {
-      color: white;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1520px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #34d399; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; line-height: 1.6; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    svg a text { text-decoration: underline; text-underline-offset: 2px; }
+    svg a:hover text { fill: #22d3ee; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; } .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; } .card-dot.amber { background: #fbbf24; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; line-height: 1.55; }
+    .card li { margin-bottom: 0.375rem; }
+    .card li a { color: #22d3ee; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; line-height: 1.6; }
   </style>
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>KRITIS Zielarchitektur — Proxmox + Kubernetes</h1>
+        <h1>KRITIS Zielarchitektur — 2 Standorte + gestreckter Cluster</h1>
       </div>
-      <p class="subtitle">2 Standorte · 4 Kubernetes-Cluster · HPE Alletra MP B10000 als Metro-Paar (lokal präsentiert + synchron gespiegelt) · gestreckter Proxmox-Cluster · Werkzeuge &amp; Erläuterungen getrennt darunter</p>
+      <p class="subtitle">Standort A und B je mit eigenem Proxmox-Cluster auf lokalem Alletra-Storage (kein Sync zwischen den Systemen) · zusätzlich EIN gestreckter Proxmox-Cluster über beide Standorte (VMs + Kubernetes) auf dem Alletra-Metro-Storage · 3 Kubernetes-Cluster · IaC via OpenTofu, Patch-Management via Uyuni</p>
     </div>
 
-    <!-- Modus-Umschalter: Aktiv/Passiv vs. Aktiv/Aktiv -->
-    <div class="mode-menu">
-      <span class="mode-label">DR-Modus:</span>
-      <button id="btn-passiv" class="mode-btn active" onclick="setMode('passiv')">Aktiv / Passiv (Standby)</button>
-      <button id="btn-aktiv" class="mode-btn" onclick="setMode('aktiv')">Aktiv / Aktiv (Lastverteilung)</button>
-    </div>
-    <div id="banner-passiv" class="mode-banner">
-      <strong>Aktiv / Passiv:</strong> Standort A trägt die Produktion, Standort B ist DR-Standby. Einfach und split-brain-sicher — aber die Hardware in Standort B bleibt ungenutzt, bis ein Failover sie braucht.
-    </div>
-    <div id="banner-aktiv" class="mode-banner" style="display:none">
-      <strong>Aktiv / Aktiv:</strong> Beide Standorte produktiv — Stateless-Services beidseitig, Datenbank-Primary in A mit Read-Replicas in B. Hardware wird in beiden Datacentern genutzt; Split-Brain bleibt dank Single-Primary-Writes aus.
-    </div>
-
-    <!-- Main Diagram -->
     <div class="diagram-container">
-      <svg viewBox="0 0 1400 2070">
+      <svg viewBox="0 0 1460 1960">
         <defs>
+        
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
           </marker>
           <marker id="arrowrose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
           </marker>
           <marker id="arrowviolet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/>
           </marker>
           <marker id="arrowemerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
           </marker>
           <marker id="arrowcyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
           </marker>
           <marker id="arrowamber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+          </marker>
+          <marker id="arrowslate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
           </marker>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
             <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
           </pattern>
         </defs>
-
-        <!-- Background Grid -->
         <rect width="100%" height="100%" fill="url(#grid)" />
-
-        <!-- ============ ARROWS (hinter Boxen) ============ -->
-
-        <!-- K8s-Nodes → Cluster: wird NACH den Standort-Boundaries gezeichnet (sonst verdeckt) -->
-
-        <!-- Cilium ClusterMesh: wird NACH den Cluster-Boxen gezeichnet (sonst von Test/Quality verdeckt) -->
-
-        <!-- Alletra Metro-Paar: synchroner Spiegel (wird NACH den Standort-Boundaries gezeichnet) -->
-
-        <!-- ============ STANDORT-BOUNDARIES (Pools, K8s-Cluster, Stretched-Cluster, Alletra) ============ -->
-
-        <!-- Standort A -->
-        <rect x="30" y="50" width="640" height="840" rx="12" fill="#0f172a"/>
-        <rect x="30" y="50" width="640" height="840" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4"/>
-        <text x="48" y="72" fill="#fbbf24" font-size="12" font-weight="600">Standort A (Primär)</text>
-        <text x="48" y="88" fill="#94a3b8" font-size="9">Datacenter A · Proxmox-Hosts auf Enterprise-Hardware</text>
-
-        <!-- Standort B -->
-        <rect x="730" y="50" width="640" height="840" rx="12" fill="#0f172a"/>
-        <rect x="730" y="50" width="640" height="840" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4"/>
-        <text x="748" y="72" fill="#fbbf24" font-size="12" font-weight="600">Standort B (Sekundär / DR)</text>
-        <text x="748" y="88" fill="#94a3b8" font-size="9">Datacenter B · Proxmox-Hosts auf Enterprise-Hardware</text>
-
-        <!-- Interconnect (nur oberer Bereich) -->
-        <rect x="674" y="90" width="52" height="370" rx="6" fill="#0f172a"/>
-        <rect x="674" y="90" width="52" height="370" rx="6" fill="rgba(120, 53, 15, 0.2)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,4"/>
-        <text x="700" y="360" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">100-Gb/s</text>
-        <text x="700" y="374" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">Metro-Link</text>
-        <text x="700" y="404" fill="#a78bfa" font-size="8" font-weight="600" text-anchor="middle">Corosync</text>
-        <text x="700" y="416" fill="#a78bfa" font-size="8" text-anchor="middle">&lt; 5 ms</text>
-
-        <!-- Innere Boundary-Kanten im Sichtfenster zwischen den Standorten abdecken (Stretched-Cluster, Metro-Paar) -->
-        <rect x="662" y="660" width="76" height="210" fill="#0f172a"/>
-
-        <!-- ============ POOL A ============ -->
-        <rect x="50" y="100" width="600" height="170" rx="8" fill="#0f172a"/>
-        <rect x="50" y="100" width="600" height="170" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="66" y="120" fill="white" font-size="11" font-weight="600">Proxmox VE — Pool A</text>
-        <text x="66" y="134" fill="#94a3b8" font-size="8">Virtualisierungsschicht für Legacy-VMs + Kubernetes-Nodes</text>
-
-        <!-- Legacy VMs A -->
-        <rect x="70" y="150" width="265" height="100" rx="6" fill="#0f172a"/>
-        <rect x="70" y="150" width="265" height="100" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="202" y="172" fill="white" font-size="11" font-weight="600" text-anchor="middle">Legacy VMs</text>
-        <text x="202" y="188" fill="#94a3b8" font-size="9" text-anchor="middle">HA über beide Standorte</text>
-        <text x="202" y="206" fill="#fbbf24" font-size="8" text-anchor="middle">Migration in Wellen</text>
-        <text x="202" y="224" fill="#94a3b8" font-size="8" text-anchor="middle">Backup via Proxmox Backup Server</text>
-
-        <!-- K8s-Nodes A -->
-        <rect x="355" y="150" width="275" height="100" rx="6" fill="#0f172a"/>
-        <rect x="355" y="150" width="275" height="100" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="492" y="172" fill="white" font-size="11" font-weight="600" text-anchor="middle">Kubernetes-Nodes</text>
-        <text x="492" y="188" fill="#94a3b8" font-size="9" text-anchor="middle">Talos Linux oder RKE2</text>
-        <text x="492" y="206" fill="#94a3b8" font-size="9" text-anchor="middle">Control-Plane + Worker</text>
-        <text x="492" y="224" fill="#34d399" font-size="8" text-anchor="middle">→ bilden die Cluster unten</text>
-
-        <!-- ============ POOL B ============ -->
-        <rect x="750" y="100" width="600" height="170" rx="8" fill="#0f172a"/>
-        <rect x="750" y="100" width="600" height="170" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="766" y="120" fill="white" font-size="11" font-weight="600">Proxmox VE — Pool B</text>
-        <text x="766" y="134" fill="#94a3b8" font-size="8">Gleicher Stack, gleiche Definition via OpenTofu (IaC)</text>
-
-        <!-- Legacy VMs B -->
-        <rect x="770" y="150" width="265" height="100" rx="6" fill="#0f172a"/>
-        <rect x="770" y="150" width="265" height="100" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="902" y="172" fill="white" font-size="11" font-weight="600" text-anchor="middle">Legacy VMs</text>
-        <text x="902" y="188" fill="#94a3b8" font-size="9" text-anchor="middle">HA über beide Standorte</text>
-        <text x="902" y="206" fill="#fbbf24" font-size="8" text-anchor="middle">Failover-Ziel</text>
-        <text x="902" y="224" fill="#94a3b8" font-size="8" text-anchor="middle">Backup via Proxmox Backup Server</text>
-
-        <!-- K8s-Nodes B -->
-        <rect x="1055" y="150" width="275" height="100" rx="6" fill="#0f172a"/>
-        <rect x="1055" y="150" width="275" height="100" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="1192" y="172" fill="white" font-size="11" font-weight="600" text-anchor="middle">Kubernetes-Nodes</text>
-        <text x="1192" y="188" fill="#94a3b8" font-size="9" text-anchor="middle">Talos Linux oder RKE2</text>
-        <text x="1192" y="206" fill="#94a3b8" font-size="9" text-anchor="middle">Control-Plane + Worker</text>
-        <text x="1192" y="224" fill="#34d399" font-size="8" text-anchor="middle">→ bilden die Cluster unten</text>
-
-        <!-- ============ K8s CLUSTER (logische Ebene) ============ -->
-
-        <!-- Prod-1 -->
-        <rect x="50" y="300" width="282" height="155" rx="8" fill="#0f172a"/>
-        <rect x="50" y="300" width="282" height="155" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="191" y="324" fill="white" font-size="12" font-weight="600" text-anchor="middle">K8s Prod-1</text>
-        <text x="191" y="342" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">AKTIV</text>
-        <text x="191" y="362" fill="#94a3b8" font-size="9" text-anchor="middle">3 Control-Plane + Worker</text>
-        <text x="191" y="378" fill="#94a3b8" font-size="9" text-anchor="middle">auf Kubernetes-Nodes (Pool A)</text>
-        <text x="191" y="396" fill="#94a3b8" font-size="8" text-anchor="middle">Cilium + Hubble (Netzwerk/Observability)</text>
-        <text x="191" y="414" fill="#a78bfa" font-size="8" text-anchor="middle">Persistent Volumes via HPE CSI (Alletra)</text>
-        <text x="191" y="432" fill="#fb7185" font-size="8" text-anchor="middle">ClusterMesh-Peer</text>
-
-        <!-- Test -->
-        <rect x="352" y="300" width="140" height="155" rx="8" fill="#0f172a"/>
-        <rect x="352" y="300" width="140" height="155" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="422" y="324" fill="white" font-size="12" font-weight="600" text-anchor="middle">K8s Test</text>
-        <text x="422" y="346" fill="#94a3b8" font-size="9" text-anchor="middle">nur Standort A</text>
-        <text x="422" y="364" fill="#94a3b8" font-size="8" text-anchor="middle">Dev-Pipeline</text>
-
-        <!-- Quality -->
-        <rect x="512" y="300" width="140" height="155" rx="8" fill="#0f172a"/>
-        <rect x="512" y="300" width="140" height="155" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="582" y="324" fill="white" font-size="12" font-weight="600" text-anchor="middle">K8s Quality</text>
-        <text x="582" y="346" fill="#94a3b8" font-size="9" text-anchor="middle">prod-identisch</text>
-        <text x="582" y="364" fill="#94a3b8" font-size="8" text-anchor="middle">Release-Abnahme</text>
-        <text x="582" y="396" fill="#22d3ee" font-size="8" text-anchor="middle">DR-Übungen</text>
-
-        <!-- Prod-2 (DR) -->
-        <rect x="750" y="300" width="282" height="155" rx="8" fill="#0f172a"/>
-        <rect x="750" y="300" width="282" height="155" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="891" y="324" fill="white" font-size="12" font-weight="600" text-anchor="middle">K8s Prod-2</text>
-        <text x="891" y="342" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle" class="mode-passiv">DR / PASSIV</text>
-        <text x="891" y="342" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle" class="mode-aktiv" style="display:none">AKTIV (Read/Stateless)</text>
-        <text x="891" y="362" fill="#94a3b8" font-size="9" text-anchor="middle">3 Control-Plane + Worker</text>
-        <text x="891" y="378" fill="#94a3b8" font-size="9" text-anchor="middle">auf Kubernetes-Nodes (Pool B)</text>
-        <text x="891" y="396" fill="#94a3b8" font-size="8" text-anchor="middle" class="mode-passiv">Failover via Global Load Balancer / DNS</text>
-        <text x="891" y="396" fill="#94a3b8" font-size="8" text-anchor="middle" class="mode-aktiv" style="display:none">Stateless beidseitig · Read-Replicas lokal · GSLB 50/50</text>
-        <text x="891" y="414" fill="#a78bfa" font-size="8" text-anchor="middle">Persistent Volumes via HPE CSI (Alletra)</text>
-        <text x="891" y="432" fill="#fb7185" font-size="8" text-anchor="middle">ClusterMesh-Peer</text>
-
-        <!-- Quality-B optional -->
-        <rect x="1052" y="300" width="278" height="155" rx="8" fill="#0f172a"/>
-        <rect x="1052" y="300" width="278" height="155" rx="8" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4"/>
-        <text x="1191" y="324" fill="white" font-size="12" font-weight="600" text-anchor="middle">K8s Quality-B</text>
-        <text x="1191" y="346" fill="#94a3b8" font-size="9" text-anchor="middle">optional</text>
-        <text x="1191" y="364" fill="#94a3b8" font-size="9" text-anchor="middle">Spiegel für</text>
-        <text x="1191" y="380" fill="#94a3b8" font-size="9" text-anchor="middle">DR-Übungen</text>
-        <text x="1191" y="412" fill="#94a3b8" font-size="8" text-anchor="middle">nur wenn Budget</text>
-
-        <!-- K8s-Nodes → Cluster (Nodes bilden die Cluster) — hier gezeichnet, sonst von den Standort-Boundaries verdeckt -->
-        <line x1="492" y1="272" x2="492" y2="296" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowemerald)"/>
-        <text x="500" y="288" fill="#34d399" font-size="8">bilden</text>
-        <line x1="1192" y1="272" x2="1192" y2="296" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowemerald)"/>
-        <text x="1200" y="288" fill="#34d399" font-size="8">bilden</text>
-
-        <!-- ============ Cilium ClusterMesh: Prod-1 ↔ Prod-2 (NACH den Cluster-Boxen = sichtbar) ============ -->
-        <line x1="191" y1="466" x2="886" y2="466" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arrowrose)"/>
-        <line x1="891" y1="476" x2="196" y2="476" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arrowrose)"/>
-        <rect x="371" y="457" width="340" height="26" rx="6" fill="#0f172a" stroke="none"/>
-        <rect x="371" y="457" width="340" height="26" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
-        <text x="541" y="466" fill="white" font-size="9" font-weight="600" text-anchor="middle">ClusterMesh</text>
-        <text x="541" y="477" fill="#fb7185" font-size="7" text-anchor="middle">Prod-1 ↔ Prod-2 · standortunabhängig (Cilium eBPF)</text>
-
-        <!-- ============ STRETCHED PROXMOX-CLUSTER (EIN Cluster über beide Standorte) ============ -->
-        <rect x="50" y="660" width="1270" height="96" rx="10" fill="#0f172a"/>
-        <rect x="50" y="660" width="1270" height="96" rx="10" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
-        <text x="685" y="684" fill="white" font-size="12" font-weight="600" text-anchor="middle">Gestreckter Proxmox-Cluster — VMs (liegt in BEIDEN Standorten vor)</text>
-        <text x="685" y="702" fill="#94a3b8" font-size="9" text-anchor="middle">EIN Proxmox-Cluster über beide Standorte · VM-Disks auf dem Alletra-Metro-Paar · Live-Migration + HA über den Metro-Link</text>
-        <text x="685" y="720" fill="#a78bfa" font-size="8" text-anchor="middle">Corosync läuft über den Metro-Link (&lt; 5 ms) · Timeouts: token + consensus &lt; 45 s halten (HA-Watchdog feuert bei 60 s)</text>
-        <text x="685" y="737" fill="#fb7185" font-size="8" text-anchor="middle">3. Stimme NICHT in A oder B: Corosync-QDevice an einem dritten Standort (TCP/IP — kein Latenz-Budget) · redundanter Metro-Pfad</text>
-        <text x="685" y="750" fill="#94a3b8" font-size="8" text-anchor="middle">FCI/RAC brauchen Multi-Writer (SCSI-3 Persistent Reservations) — auf dem Alletra-Metro-Paar möglich</text>
-
-        <!-- ============ HPE ALLETRA MP B10000 — 2 Systeme, EIN Metro-Paar ============ -->
-
-        <!-- Alletra Site A -->
-        <rect x="50" y="485" width="600" height="150" rx="10" fill="#0f172a"/>
-        <rect x="50" y="485" width="600" height="150" rx="10" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <a href="https://www.hpe.com/de/de/storage/alletra-storage-mp.html" target="_blank"><text x="350" y="509" fill="white" font-size="12" font-weight="600" text-anchor="middle">HPE Alletra MP B10000 — Site A ↗</text></a>
-        <text x="350" y="527" fill="#94a3b8" font-size="9" text-anchor="middle">System 1 von 2 · präsentiert LUNs/Namespaces LOKAL — kein Metro-Roundtrip im I/O-Pfad</text>
-        <rect x="80" y="543" width="290" height="70" rx="6" fill="#0f172a"/>
-        <rect x="80" y="543" width="290" height="70" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="225" y="561" fill="white" font-size="9" font-weight="600" text-anchor="middle">Block: iSCSI / FC / NVMe-oF</text>
-        <text x="225" y="577" fill="#94a3b8" font-size="7" text-anchor="middle">NVMe/TCP · Multi-Path (dm-multipath</text>
-        <text x="225" y="588" fill="#94a3b8" font-size="7" text-anchor="middle">bzw. nativer NVMe-Multipath)</text>
-        <text x="225" y="603" fill="#94a3b8" font-size="7" text-anchor="middle">Dual-Fabric A/B gegen Pfadausfall</text>
-        <text x="350" y="626" fill="#a78bfa" font-size="8" text-anchor="middle">VM-Disks des gestreckten Proxmox-Clusters · K8s-PVs via HPE CSI Driver</text>
-
-        <!-- Alletra Site B -->
-        <rect x="750" y="485" width="600" height="150" rx="10" fill="#0f172a"/>
-        <rect x="750" y="485" width="600" height="150" rx="10" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <a href="https://www.hpe.com/de/de/storage/alletra-storage-mp.html" target="_blank"><text x="1050" y="509" fill="white" font-size="12" font-weight="600" text-anchor="middle">HPE Alletra MP B10000 — Site B ↗</text></a>
-        <text x="1050" y="527" fill="#94a3b8" font-size="9" text-anchor="middle">System 2 von 2 · lokale Präsentation in Site B — Active/Active-Peer des Paares</text>
-        <rect x="1080" y="543" width="290" height="70" rx="6" fill="#0f172a"/>
-        <rect x="1080" y="543" width="290" height="70" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="1225" y="561" fill="white" font-size="9" font-weight="600" text-anchor="middle">Datei: NFS (Templates/ISOs)</text>
-        <text x="1225" y="577" fill="#94a3b8" font-size="7" text-anchor="middle">Block für K8s: HPE CSI Driver +</text>
-        <text x="1225" y="588" fill="#94a3b8" font-size="7" text-anchor="middle">Active Peer Persistence → auto-</text>
-        <text x="1225" y="603" fill="#94a3b8" font-size="7" text-anchor="middle">matische Workload-Recovery</text>
-        <text x="1050" y="626" fill="#fb7185" font-size="8" text-anchor="middle">Anwendungs-Replikation bleibt Pflicht: CloudNativePG (K8s) · Patroni (DB-VMs)</text>
-
-        <!-- Metro-Spiegel zwischen den beiden Systemen — Text/Arrows im Sichtfenster 670..730 zwischen den Standort-Boundaries -->
-        <line x1="656" y1="562" x2="744" y2="562" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
-        <line x1="744" y1="580" x2="656" y2="580" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
-        <text x="700" y="552" fill="#a78bfa" font-size="8" font-weight="600" text-anchor="middle">Metro-Sync</text>
-        <text x="700" y="598" fill="#94a3b8" font-size="7" text-anchor="middle">Peer</text>
-        <text x="700" y="608" fill="#94a3b8" font-size="7" text-anchor="middle">Persistence</text>
-
-        <!-- Übergang Storage- -> App-Ebene -->
-        <rect x="646" y="635" width="108" height="22" rx="6" fill="#0f172a" stroke="none"/>
-        <rect x="646" y="635" width="108" height="22" rx="6" fill="rgba(30, 41, 59, 0.9)" stroke="#94a3b8" stroke-width="1"/>
-        <text x="700" y="650" fill="#94a3b8" font-size="7" text-anchor="middle">async: CNPG / Patroni</text>
-
-        <!-- ============ ALLETRA METRO-PAAR (Metro-Storage für VMs und K8s-Cluster) ============ -->
-        <rect x="50" y="772" width="1270" height="96" rx="10" fill="#0f172a"/>
-        <rect x="50" y="772" width="1270" height="96" rx="10" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="685" y="796" fill="white" font-size="12" font-weight="600" text-anchor="middle">Alletra-Metro-Paar — EIN Speichersystem über beide Standorte (Peer Persistence)</text>
-        <text x="685" y="814" fill="#94a3b8" font-size="9" text-anchor="middle">Synchroner Spiegel über den Metro-Link · transparentes Failover · die Array-eigene Quorum-Witness entscheidet (kein Storage-Split-Brain)</text>
-        <text x="685" y="832" fill="#a78bfa" font-size="8" text-anchor="middle">Storage für den gestreckten Proxmox-Cluster (VM-Disks) UND für Kubernetes-Cluster mit Metro-Storage-Bedarf</text>
-        <text x="685" y="850" fill="#fb7185" font-size="8" text-anchor="middle">RPO 0 auf Storage-Ebene — die Anwendungs-Replikation (CNPG/Patroni) läuft zusätzlich über beide Standorte</text>
-
-        <!-- ============ WERKZEUGE (außerhalb der Standort-Boxen) ============ -->
-        <rect x="330" y="900" width="710" height="20" fill="#0f172a"/>
-        <text x="685" y="910" fill="#22d3ee" font-size="11" font-weight="600" text-anchor="middle">Plattform-Werkzeuge — GitOps/CI-CD + Netzwerk/Observability · gelten NUR für die Kubernetes-Cluster</text>
-
-        <!-- Zeile 1: GitOps/CI-CD -->
-        <!-- ArgoCD -->
-        <rect x="50" y="920" width="300" height="100" rx="8" fill="#0f172a"/>
-        <rect x="50" y="920" width="300" height="100" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <a href="https://argoproj.github.io/cd/" target="_blank"><text x="200" y="944" fill="white" font-size="12" font-weight="600" text-anchor="middle">ArgoCD ↗</text></a>
-        <text x="200" y="962" fill="#94a3b8" font-size="8" text-anchor="middle">GitOps-Sync: Cluster-Zustand = Git-Repo</text>
-        <text x="200" y="978" fill="#94a3b8" font-size="8" text-anchor="middle">Auto-Sync, Diff, Rollback</text>
-        <text x="200" y="994" fill="#94a3b8" font-size="8" text-anchor="middle">Prod/Test/Quality aus einem Repo</text>
-        <text x="200" y="1010" fill="#94a3b8" font-size="7" text-anchor="middle">github.com/argoproj/argo-cd</text>
-
-        <!-- Cluster API -->
-        <rect x="365" y="920" width="300" height="100" rx="8" fill="#0f172a"/>
-        <rect x="365" y="920" width="300" height="100" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <a href="https://cluster-api.sigs.k8s.io/" target="_blank"><text x="515" y="944" fill="white" font-size="12" font-weight="600" text-anchor="middle">Cluster API ↗</text></a>
-        <text x="515" y="962" fill="#94a3b8" font-size="8" text-anchor="middle">Cluster als Code: erstellt/upgradet/</text>
-        <text x="515" y="978" fill="#94a3b8" font-size="8" text-anchor="middle">repariert reproduzierbar</text>
-        <text x="515" y="994" fill="#94a3b8" font-size="8" text-anchor="middle">Talos &amp; RKE2 unterstützt</text>
-        <text x="515" y="1010" fill="#94a3b8" font-size="7" text-anchor="middle">github.com/kubernetes-sigs/cluster-api</text>
-
-        <!-- GitLab CI -->
-        <rect x="680" y="920" width="300" height="100" rx="8" fill="#0f172a"/>
-        <rect x="680" y="920" width="300" height="100" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <a href="https://about.gitlab.com/" target="_blank"><text x="830" y="944" fill="white" font-size="12" font-weight="600" text-anchor="middle">GitLab CI ↗</text></a>
-        <text x="830" y="962" fill="#94a3b8" font-size="8" text-anchor="middle">Pipelines: Build → Test → Sign</text>
-        <text x="830" y="978" fill="#94a3b8" font-size="8" text-anchor="middle">Promotion Test → Quality → Prod</text>
-        <text x="830" y="994" fill="#94a3b8" font-size="8" text-anchor="middle">kein manueller Deploy in Prod</text>
-        <text x="830" y="1010" fill="#94a3b8" font-size="7" text-anchor="middle">about.gitlab.com (self-hosted)</text>
-
-        <!-- Harbor -->
-        <rect x="995" y="920" width="300" height="100" rx="8" fill="#0f172a"/>
-        <rect x="995" y="920" width="300" height="100" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <a href="https://goharbor.io/" target="_blank"><text x="1145" y="944" fill="white" font-size="12" font-weight="600" text-anchor="middle">Harbor ↗</text></a>
-        <text x="1145" y="962" fill="#94a3b8" font-size="8" text-anchor="middle">Container-Registry (self-hosted)</text>
-        <text x="1145" y="978" fill="#94a3b8" font-size="8" text-anchor="middle">Image-Scanning + Signierung</text>
-        <text x="1145" y="994" fill="#94a3b8" font-size="8" text-anchor="middle">nur signierte Images (Policy)</text>
-        <text x="1145" y="1010" fill="#94a3b8" font-size="7" text-anchor="middle">github.com/goharbor/harbor</text>
-
-        <!-- Zeile 2: Cluster-Mesh (Cilium + Hubble, cyan wie Werkzeuge) -->
-        <rect x="50" y="1035" width="1270" height="80" rx="8" fill="#0f172a"/>
-        <rect x="50" y="1035" width="1270" height="80" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <a href="https://cilium.io/" target="_blank"><text x="80" y="1058" fill="white" font-size="12" font-weight="600">Cluster-Mesh ↗</text></a>
-        <text x="80" y="1076" fill="#94a3b8" font-size="8">Cilium: CNI + NetworkPolicies (eBPF) — verbindet die Cluster</text>
-        <text x="80" y="1092" fill="#94a3b8" font-size="8">Hubble: Flow-Logs, Service-Map, Metriken (Observability)</text>
-        <text x="80" y="1106" fill="#94a3b8" font-size="7">github.com/cilium/cilium · github.com/cilium/hubble · docs.cilium.io</text>
-
-        <!-- ============ OPENTOFU (außerhalb, für Infrastruktur) ============ -->
-        <rect x="300" y="1140" width="770" height="20" fill="#0f172a"/>
-        <text x="685" y="1150" fill="#fbbf24" font-size="11" font-weight="600" text-anchor="middle">Infrastructure as Code — EIN Werkzeug: OpenTofu (Proxmox-VMs, Hosts, Netzwerk, Legacy-VMs)</text>
-
-        <!-- OpenTofu -->
-        <rect x="50" y="1160" width="1270" height="125" rx="8" fill="#0f172a"/>
-        <rect x="50" y="1160" width="1270" height="125" rx="8" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-        <a href="https://opentofu.org/" target="_blank"><text x="685" y="1184" fill="white" font-size="12" font-weight="600" text-anchor="middle">OpenTofu ↗</text></a>
-        <text x="685" y="1202" fill="#94a3b8" font-size="9" text-anchor="middle">Provisioning + Config-Management — ersetzt Ansible vollständig (deklarativ, planbar, idempotent)</text>
-        <text x="685" y="1220" fill="#94a3b8" font-size="8" text-anchor="middle">Proxmox-VMs/-Container über den Proxmox-Provider (bpg/proxmox) · Hosts · Netzwerk-Baseline · Node-Images</text>
-        <text x="685" y="1238" fill="#94a3b8" font-size="8" text-anchor="middle">Legacy-VM-Konfiguration und Anwendungs-Deploy · beide Standorte deklarativ identisch</text>
-        <text x="685" y="1258" fill="#fbbf24" font-size="8" text-anchor="middle">State zentral + verschlüsselt (keine Secrets im Klartext) · NICHT für Cluster-Inhalte — das macht GitOps (ArgoCD + Cluster API)</text>
-        <text x="685" y="1276" fill="#94a3b8" font-size="7" text-anchor="middle">opentofu.org · Registry: bpg/proxmox (Terraform-/OpenTofu-Provider für Proxmox VE, BPG Labs)</text>
-
-        <!-- ============ ERLÄUTERUNGEN (getrennt, außerhalb) ============ -->
-        <text x="685" y="1320" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">────── Erläuterungen (getrennt von der Architektur) ──────</text>
-
-        <!-- Quorum & Split-Brain -->
-        <rect x="50" y="1340" width="625" height="235" rx="8" fill="#0f172a"/>
-        <rect x="50" y="1340" width="625" height="235" rx="8" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="70" y="1364" fill="white" font-size="11" font-weight="600">Quorum &amp; Split-Brain — wer entscheidet bei Trennung?</text>
-        <text x="70" y="1386" fill="#94a3b8" font-size="9">Der Proxmox-Cluster IST gestreckt — die 3. Stimme darf deshalb</text>
-        <text x="70" y="1402" fill="#94a3b8" font-size="9">NICHT in Standort A oder B liegen:</text>
-        <text x="70" y="1422" fill="#a78bfa" font-size="9">• Corosync-QDevice (corosync-qnetd) an einem dritten Standort —</text>
-        <text x="70" y="1438" fill="#a78bfa" font-size="9">  läuft über TCP/IP und unterliegt NICHT dem 5-ms-Budget</text>
-        <text x="70" y="1458" fill="#a78bfa" font-size="9">• Alletra-Metro-Paar: die Array-eigene Quorum-Witness entscheidet,</text>
-        <text x="70" y="1474" fill="#a78bfa" font-size="9">  welches System präsentiert → kein Storage-Split-Brain</text>
-        <text x="70" y="1494" fill="#34d399" font-size="9">• Kubernetes: etcd bleibt STANDORTLOKAL (3 Control-Plane im</text>
-        <text x="70" y="1510" fill="#34d399" font-size="9">  eigenen DC) — kein gestrecktes etcd über die Standorte</text>
-        <text x="70" y="1530" fill="#fb7185" font-size="9">• Link A↔B fällt aus: kein automatischer VM-Start in B (kein</text>
-        <text x="70" y="1546" fill="#fb7185" font-size="9">  Quorum) — QDevice + redundanter Metro-Pfad müssen entscheiden</text>
-        <text x="70" y="1566" fill="#94a3b8" font-size="9">• Echter Standortausfall: VM-Start im Rest-DC, DB-Promotion</text>
-
-        <!-- Storage & Hardware -->
-        <rect x="695" y="1340" width="625" height="235" rx="8" fill="#0f172a"/>
-        <rect x="695" y="1340" width="625" height="235" rx="8" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="715" y="1364" fill="white" font-size="11" font-weight="600">Storage-Aufbau &amp; Hardware</text>
-        <text x="715" y="1386" fill="#94a3b8" font-size="9">• HPE Alletra MP B10000 = 2 Systeme, EIN Metro-Paar: jedes System</text>
-        <text x="715" y="1402" fill="#94a3b8" font-size="9">  präsentiert lokal, gespiegelt wird synchron über den Metro-Link</text>
-        <text x="715" y="1422" fill="#94a3b8" font-size="9">• Block-Anbindung: iSCSI / FC / NVMe-oF (FC oder TCP) über</text>
-        <text x="715" y="1438" fill="#94a3b8" font-size="9">  DUAL-FABRIC (2 getrennte Switches) + Multipath im Gast</text>
-        <text x="715" y="1458" fill="#94a3b8" font-size="9">• K8s-PVs: HPE CSI Driver — Active Peer Persistence liefert</text>
-        <text x="715" y="1474" fill="#94a3b8" font-size="9">  automatische Workload-Recovery beim Array-Failover</text>
-        <text x="715" y="1494" fill="#94a3b8" font-size="9">• Die Array ersetzt die bisherige Software-Storage-Schicht komplett</text>
-        <text x="715" y="1510" fill="#94a3b8" font-size="9">• Server: 2× NVMe (OS, RAID1) · 25-Gigabit-Ethernet+</text>
-        <text x="715" y="1530" fill="#94a3b8" font-size="9">• etcd: lokale NVMe der Control-Plane-Nodes — NIE auf dem</text>
-        <text x="715" y="1546" fill="#94a3b8" font-size="9">  Metro-Storage (etcd verträgt keine Metro-Latenz)</text>
-        <text x="715" y="1566" fill="#94a3b8" font-size="9">• DB-Replikation: CloudNativePG (K8s) · Patroni (DB-VMs)</text>
-
-        <!-- Datenhaltung -->
-        <rect x="50" y="1595" width="625" height="235" rx="8" fill="#0f172a"/>
-        <rect x="50" y="1595" width="625" height="235" rx="8" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="70" y="1619" fill="white" font-size="11" font-weight="600">Datenhaltung — wo liegt was?</text>
-        <text x="70" y="1641" fill="#94a3b8" font-size="9">• etcd (Cluster-State): lokale NVMe der Control-Plane-Nodes</text>
-        <text x="70" y="1659" fill="#94a3b8" font-size="9">• VM-Disks: Alletra-Metro-Paar (Block, synchron gespiegelt)</text>
-        <text x="70" y="1677" fill="#94a3b8" font-size="9">• K8s-Persistent-Volumes: Alletra über HPE CSI Driver</text>
-        <text x="70" y="1695" fill="#94a3b8" font-size="9">• Datenbanken: Postgres als CloudNativePG-Cluster (K8s) bzw.</text>
-        <text x="70" y="1711" fill="#94a3b8" font-size="9">  Patroni in VMs — Replikation reicht über beide Standorte</text>
-        <text x="70" y="1731" fill="#94a3b8" font-size="9">• Konfiguration/Code: Git-Repo (GitOps) · Images: Harbor</text>
-        <text x="70" y="1749" fill="#94a3b8" font-size="9">• Secrets: Vault + External Secrets Operator · Policy: Kyverno</text>
-        <text x="70" y="1767" fill="#94a3b8" font-size="9">• Logs: Loki + SIEM · Zustandslose Apps: kein PV nötig</text>
-        <text x="70" y="1785" fill="#94a3b8" font-size="9">• Backups: Proxmox Backup Server (VMs) + Velero (K8s)</text>
-        <text x="70" y="1803" fill="#94a3b8" font-size="9">  + Datenbank-Dumps → MinIO</text>
-        <text x="70" y="1823" fill="#a78bfa" font-size="8">Regel: Cluster-State lokal (schnell) · Zustandsdaten auf dem Metro-Storage</text>
-
-        <!-- Backup & Veeam -->
-        <rect x="695" y="1595" width="625" height="235" rx="8" fill="#0f172a"/>
-        <rect x="695" y="1595" width="625" height="235" rx="8" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="715" y="1619" fill="white" font-size="11" font-weight="600">Backup &amp; Veeam</text>
-        <text x="715" y="1641" fill="#94a3b8" font-size="9">• Datenbanken, 3 Wege: (1) Array-Snapshots (Alletra) via Velero,</text>
-        <text x="715" y="1659" fill="#94a3b8" font-size="9">  (2) native Dumps (pg_dump) als CronJob → MinIO,</text>
-        <text x="715" y="1675" fill="#94a3b8" font-size="9">  (3) CloudNativePG-Backup (WAL/Barman) für Recovery im Sekundenbereich</text>
-        <text x="715" y="1693" fill="#94a3b8" font-size="9">• VMs: Proxmox Backup Server (dedupliziert + verschlüsselt)</text>
-        <text x="715" y="1711" fill="#94a3b8" font-size="9">• Kubernetes: Velero → MinIO (S3-kompatibel),</text>
-        <text x="715" y="1727" fill="#94a3b8" font-size="9">  Cross-Datacenter-Restore</text>
-        <text x="715" y="1745" fill="#94a3b8" font-size="9">• Veeam: nach VMware-Ausstieg NICHT mehr nötig — Proxmox</text>
-        <text x="715" y="1761" fill="#94a3b8" font-size="9">  Backup Server + Velero übernehmen (gleiche Funktion, nativer Stack)</text>
-        <text x="715" y="1779" fill="#94a3b8" font-size="9">• Steuerungsebene sichern: GitLab, Harbor, ArgoCD, Vault, MinIO + WORM/Offsite (3-2-1)</text>
-        <text x="715" y="1803" fill="#fb7185" font-size="8">Restore-Tests terminieren + protokollieren (ISO 27001)</text>
-
-        <!-- ============ OFFENE ENTSCHEIDUNGEN (Agenten-Review) ============ -->
-        <rect x="50" y="1850" width="1270" height="145" rx="8" fill="#0f172a"/>
-        <rect x="50" y="1850" width="1270" height="145" rx="8" fill="rgba(30, 41, 59, 0.6)" stroke="#fbbf24" stroke-width="1.5"/>
-        <text x="70" y="1874" fill="white" font-size="11" font-weight="600">Offene Entscheidungen — aus dem 3-Agenten-Review (MoA)</text>
-        <text x="70" y="1896" fill="#94a3b8" font-size="9">• RTO/RPO-Ziele aus einer BIA ableiten (z.B. RPO ≤ 1 h, RTO ≤ 4 h) — ohne Zielwerte ist KRITIS-Konformität nicht belegbar</text>
-        <text x="70" y="1914" fill="#94a3b8" font-size="9">• GSLB mit Health-Checks statt reinem DNS-Failover (TTL/Caching) · Failover-/Failback-Runbooks + DR-Übungen mit gemessenen Werten</text>
-        <text x="70" y="1932" fill="#94a3b8" font-size="9" class="mode-passiv">• ClusterMesh-Entscheidung: Warm-Standby + Locality-Routing ODER streichen — „DR/PASSIV + ClusterMesh" ist inkonsistent</text>
-        <text x="70" y="1932" fill="#34d399" font-size="9" class="mode-aktiv" style="display:none">• ClusterMesh: Active/Active umgesetzt — Locality-Routing, Replicas über beide Standorte, GSLB 50/50 (DB-Primary bleibt in A)</text>
-        <text x="70" y="1950" fill="#94a3b8" font-size="9">• GitOps-SPOFs beseitigen: Harbor-Replikation nach Standort B · GitLab/ArgoCD/CAPI-Management-Cluster selbst DR-fähig · MinIO-Replikation</text>
-        <text x="70" y="1968" fill="#94a3b8" font-size="9">• SSO/OIDC + MFA durchgängig (GitLab, ArgoCD, Harbor, Kubernetes-API, Proxmox) · Audit-Log-Retention ≥ 6–12 Monate · etcd-Snapshots sichern</text>
-        <text x="70" y="1986" fill="#fbbf24" font-size="8">Doku-/Entscheidungsarbeit — kein Umbau der Grundarchitektur · neu: QDevice-Standort festlegen + Corosync-Timeouts an gemessener Metro-Latenz tunen (failover.md §9)</text>
-
-        <!-- ============ LEGEND (2 Zeilen) ============ -->
-        <text x="80" y="2025" fill="white" font-size="11" font-weight="600">Legend</text>
-
-        <rect x="80" y="2036" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
-        <text x="102" y="2044" fill="#94a3b8" font-size="8">Kubernetes / Nodes</text>
-
-        <rect x="230" y="2036" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
-        <text x="252" y="2044" fill="#94a3b8" font-size="8">Proxmox / Legacy-VMs</text>
-
-        <rect x="400" y="2036" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
-        <text x="422" y="2044" fill="#94a3b8" font-size="8">Storage (Alletra / Metro)</text>
-
-        <rect x="540" y="2036" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
-        <text x="562" y="2044" fill="#94a3b8" font-size="8">GitOps &amp; Plattform-Werkzeuge (K8s)</text>
-
-        <rect x="760" y="2036" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
-        <text x="782" y="2044" fill="#94a3b8" font-size="8">Metro / HA / Redundanz</text>
-
-        <rect x="940" y="2036" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
-        <text x="962" y="2044" fill="#94a3b8" font-size="8">IaC (OpenTofu)</text>
-
-        <rect x="1090" y="2036" width="16" height="10" rx="2" fill="transparent" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="1112" y="2044" fill="#94a3b8" font-size="8">Standort-Boundary / Metro-Link</text>
-
-        <line x1="1280" y1="2041" x2="1296" y2="2041" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="3,3"/>
-        <text x="1302" y="2044" fill="#94a3b8" font-size="8">ClusterMesh</text>
+        <rect x="30" y="40" width="670" height="570" rx="12" fill="#0f172a"/>
+        <rect x="30" y="40" width="670" height="570" rx="12" fill="rgba(120, 53, 15, 0.28)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4"/>
+        <text x="48" y="66" fill="#fbbf24" font-size="12" font-weight="600">Standort A</text>
+        <text x="48" y="84" fill="#94a3b8" font-size="9">eigenständiger Proxmox-Cluster · lokaler Alletra-Storage · KEIN Sync zum anderen Standort</text>
+        <rect x="50" y="100" width="630" height="480" rx="8" fill="#0f172a"/>
+        <rect x="50" y="100" width="630" height="480" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="68" y="124" fill="#94a3b8" font-size="12" font-weight="600">Proxmox-Cluster A</text>
+        <text x="68" y="141" fill="#94a3b8" font-size="8">eigener Cluster, NICHT gestreckt · eigenes Quorum</text>
+        <text x="68" y="156" fill="#fbbf24" font-size="8">provisioniert via OpenTofu · Patch-Management via Uyuni</text>
+        <rect x="390" y="175" width="270" height="195" rx="8" fill="#0f172a"/>
+        <rect x="390" y="175" width="270" height="195" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="410" y="199" fill="#34d399" font-size="11" font-weight="600">Kubernetes-Cluster A</text>
+        <text x="410" y="219" fill="#94a3b8" font-size="8">3 Control-Plane + Worker</text>
+        <text x="410" y="236" fill="#94a3b8" font-size="8">(Nodes als VMs)</text>
+        <text x="410" y="253" fill="#94a3b8" font-size="8"></text>
+        <text x="410" y="270" fill="#94a3b8" font-size="8">etcd: STANDORTLOKAL</text>
+        <text x="410" y="287" fill="#94a3b8" font-size="8">(Node-NVMe oder lokaler</text>
+        <text x="410" y="304" fill="#94a3b8" font-size="8"> Alletra-LUN)</text>
+        <text x="410" y="321" fill="#94a3b8" font-size="8">CNI: Cilium + Hubble</text>
+        <text x="410" y="358" fill="#a78bfa" font-size="8">DBs → Standort B: CloudNativePG</text>
+        <rect x="70" y="175" width="300" height="195" rx="8" fill="#0f172a"/>
+        <rect x="70" y="175" width="300" height="195" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="90" y="199" fill="#94a3b8" font-size="11" font-weight="600">Weitere VMs</text>
+        <text x="90" y="219" fill="#94a3b8" font-size="8">nicht gestreckt</text>
+        <text x="90" y="236" fill="#94a3b8" font-size="8">standortgebunden</text>
+        <text x="90" y="253" fill="#94a3b8" font-size="8"></text>
+        <text x="90" y="270" fill="#94a3b8" font-size="8">kein Metro-Storage</text>
+        <text x="90" y="287" fill="#94a3b8" font-size="8">erforderlich</text>
+        <text x="90" y="304" fill="#94a3b8" font-size="8"></text>
+        <text x="90" y="321" fill="#94a3b8" font-size="8">Backup: PBS</text>
+        <rect x="70" y="390" width="590" height="170" rx="8" fill="#0f172a"/>
+        <rect x="70" y="390" width="590" height="170" rx="8" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="90" y="414" fill="#a78bfa" font-size="10" font-weight="600">Storage-Anbindung — Alletra A, LUNs „lokal-only“</text>
+        <text x="90" y="436" fill="#94a3b8" font-size="8">Block: iSCSI / FC / NVMe-oF (FC oder TCP)</text>
+        <text x="90" y="453" fill="#94a3b8" font-size="8">Dual-Fabric (2 getrennte Switches) + Multipath im Gast</text>
+        <text x="90" y="470" fill="#94a3b8" font-size="8">eigener Pool / eigene Host-Gruppe für die lokalen LUNs</text>
+        <text x="90" y="487" fill="#94a3b8" font-size="8">KEIN Spiegel-Peer — diese LUNs existieren nur in A</text>
+        <text x="90" y="504" fill="#94a3b8" font-size="8">→ versorgt Proxmox-Cluster A, dessen K8s-PVs und die übrigen VMs</text>
+        <text x="90" y="546" fill="#94a3b8" font-size="7">Array-Details im Storage-Block unten</text>
+        <rect x="760" y="40" width="670" height="570" rx="12" fill="#0f172a"/>
+        <rect x="760" y="40" width="670" height="570" rx="12" fill="rgba(120, 53, 15, 0.28)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4"/>
+        <text x="778" y="66" fill="#fbbf24" font-size="12" font-weight="600">Standort B</text>
+        <text x="778" y="84" fill="#94a3b8" font-size="9">eigenständiger Proxmox-Cluster · lokaler Alletra-Storage · KEIN Sync zum anderen Standort</text>
+        <rect x="780" y="100" width="630" height="480" rx="8" fill="#0f172a"/>
+        <rect x="780" y="100" width="630" height="480" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="798" y="124" fill="#94a3b8" font-size="12" font-weight="600">Proxmox-Cluster B</text>
+        <text x="798" y="141" fill="#94a3b8" font-size="8">eigener Cluster, NICHT gestreckt · eigenes Quorum</text>
+        <text x="798" y="156" fill="#fbbf24" font-size="8">provisioniert via OpenTofu · Patch-Management via Uyuni</text>
+        <rect x="800" y="175" width="270" height="195" rx="8" fill="#0f172a"/>
+        <rect x="800" y="175" width="270" height="195" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="820" y="199" fill="#34d399" font-size="11" font-weight="600">Kubernetes-Cluster B</text>
+        <text x="820" y="219" fill="#94a3b8" font-size="8">3 Control-Plane + Worker</text>
+        <text x="820" y="236" fill="#94a3b8" font-size="8">(Nodes als VMs)</text>
+        <text x="820" y="253" fill="#94a3b8" font-size="8"></text>
+        <text x="820" y="270" fill="#94a3b8" font-size="8">etcd: STANDORTLOKAL</text>
+        <text x="820" y="287" fill="#94a3b8" font-size="8">(Node-NVMe oder lokaler</text>
+        <text x="820" y="304" fill="#94a3b8" font-size="8"> Alletra-LUN)</text>
+        <text x="820" y="321" fill="#94a3b8" font-size="8">CNI: Cilium + Hubble</text>
+        <text x="820" y="358" fill="#a78bfa" font-size="8">DBs → Standort A: CloudNativePG</text>
+        <rect x="1090" y="175" width="320" height="195" rx="8" fill="#0f172a"/>
+        <rect x="1090" y="175" width="320" height="195" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="1110" y="199" fill="#94a3b8" font-size="11" font-weight="600">Weitere VMs</text>
+        <text x="1110" y="219" fill="#94a3b8" font-size="8">nicht gestreckt</text>
+        <text x="1110" y="236" fill="#94a3b8" font-size="8">standortgebunden</text>
+        <text x="1110" y="253" fill="#94a3b8" font-size="8"></text>
+        <text x="1110" y="270" fill="#94a3b8" font-size="8">kein Metro-Storage</text>
+        <text x="1110" y="287" fill="#94a3b8" font-size="8">erforderlich</text>
+        <text x="1110" y="304" fill="#94a3b8" font-size="8"></text>
+        <text x="1110" y="321" fill="#94a3b8" font-size="8">Backup: PBS</text>
+        <rect x="800" y="390" width="590" height="170" rx="8" fill="#0f172a"/>
+        <rect x="800" y="390" width="590" height="170" rx="8" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="820" y="414" fill="#a78bfa" font-size="10" font-weight="600">Storage-Anbindung — Alletra B, LUNs „lokal-only“</text>
+        <text x="820" y="436" fill="#94a3b8" font-size="8">Block: iSCSI / FC / NVMe-oF (FC oder TCP)</text>
+        <text x="820" y="453" fill="#94a3b8" font-size="8">Dual-Fabric (2 getrennte Switches) + Multipath im Gast</text>
+        <text x="820" y="470" fill="#94a3b8" font-size="8">eigener Pool / eigene Host-Gruppe für die lokalen LUNs</text>
+        <text x="820" y="487" fill="#94a3b8" font-size="8">KEIN Spiegel-Peer — diese LUNs existieren nur in B</text>
+        <text x="820" y="504" fill="#94a3b8" font-size="8">→ versorgt Proxmox-Cluster B, dessen K8s-PVs und die übrigen VMs</text>
+        <text x="820" y="546" fill="#94a3b8" font-size="7">Array-Details im Storage-Block unten</text>
+        <rect x="686" y="210" width="88" height="74" rx="6" fill="#0f172a"/>
+        <rect x="686" y="210" width="88" height="74" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="730" y="232" fill="#a78bfa" font-size="8" text-anchor="middle">CloudNativePG</text>
+        <text x="730" y="246" fill="#a78bfa" font-size="8" text-anchor="middle">DB-Replikation</text>
+        <text x="730" y="258" fill="#94a3b8" font-size="7" text-anchor="middle">(Anwendungsebene)</text>
+        <line x1="660" y1="228" x2="688" y2="228" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowviolet)"/>
+        <line x1="800" y1="248" x2="772" y2="248" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowviolet)"/>
+        <rect x="270" y="626" width="920" height="194" rx="8" fill="#0f172a"/>
+        <rect x="270" y="626" width="920" height="194" rx="8" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="292" y="652" fill="#fb7185" font-size="12" font-weight="600">GESTRECKTER Proxmox-Cluster — EIN Cluster über beide Standorte</text>
+        <text x="292" y="670" fill="#94a3b8" font-size="9">enthält VMs UND einen Kubernetes-Cluster · Storage: Alletra-Metro-Paar (beide Systeme, synchron gespiegelt)</text>
+        <text x="292" y="687" fill="#a78bfa" font-size="8">Corosync läuft über den Metro-Link (&lt; 5 ms) · Timeouts: token + consensus &lt; 45 s halten (HA-Watchdog feuert bei 60 s)</text>
+        <text x="292" y="701" fill="#fb7185" font-size="8">3. Stimme außerhalb beider Standorte: Corosync-QDevice (TCP/IP — nicht an das 5-ms-Budget gebunden) · redundanter Metro-Pfad</text>
+        <rect x="292" y="712" width="428" height="100" rx="8" fill="#0f172a"/>
+        <rect x="292" y="712" width="428" height="100" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="310" y="734" fill="#94a3b8" font-size="10" font-weight="600">VMs</text>
+        <text x="310" y="754" fill="#94a3b8" font-size="8">Live-Migration und HA über den Metro-Link</text>
+        <text x="310" y="770" fill="#94a3b8" font-size="8">Disks auf dem Metro-LUN → am anderen</text>
+        <text x="310" y="786" fill="#94a3b8" font-size="8">Standort bereits vorhanden (RPO 0)</text>
+        <rect x="742" y="712" width="428" height="100" rx="8" fill="#0f172a"/>
+        <rect x="742" y="712" width="428" height="100" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="760" y="734" fill="#34d399" font-size="10" font-weight="600">Kubernetes-Cluster (gestreckt)</text>
+        <text x="760" y="754" fill="#94a3b8" font-size="8">etcd: 3 Mitglieder, ALLE an EINEM Standort</text>
+        <text x="760" y="770" fill="#94a3b8" font-size="8">Ablage lokal ODER Metro-LUN — offener Test (Jumbo Frames 9000)</text>
+        <text x="760" y="786" fill="#94a3b8" font-size="8">PVs: Metro-LUN via HPE CSI (Active Peer Persistence)</text>
+        <line x1="150" y1="828" x2="150" y2="614" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowviolet)"/>
+        <rect x="60" y="672" width="180" height="26" rx="6" fill="#0f172a"/>
+        <rect x="60" y="672" width="180" height="26" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="150" y="689" fill="#a78bfa" font-size="8" text-anchor="middle">LUNs lokal-only</text>
+        <line x1="1310" y1="828" x2="1310" y2="614" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowviolet)"/>
+        <rect x="1220" y="672" width="180" height="26" rx="6" fill="#0f172a"/>
+        <rect x="1220" y="672" width="180" height="26" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="1310" y="689" fill="#a78bfa" font-size="8" text-anchor="middle">LUNs lokal-only</text>
+        <rect x="30" y="830" width="1400" height="250" rx="8" fill="#0f172a"/>
+        <rect x="30" y="830" width="1400" height="250" rx="8" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="50" y="852" fill="#a78bfa" font-size="10" font-weight="600">Storage — HPE Alletra MP B10000 (2 Systeme) · jede Array trägt ZWEI LUN-Klassen · Dual-Fabric + Multipath im Gast</text>
+        <rect x="50" y="864" width="650" height="196" rx="8" fill="#0f172a"/>
+        <rect x="50" y="864" width="650" height="196" rx="8" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="70" y="886" fill="#a78bfa" font-size="11" font-weight="600">System A — Standort A</text>
+        <rect x="70" y="896" width="280" height="152" rx="8" fill="#0f172a"/>
+        <rect x="70" y="896" width="280" height="152" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="88" y="918" fill="#94a3b8" font-size="9" font-weight="600">LUNs „lokal-only“</text>
+        <text x="88" y="938" fill="#94a3b8" font-size="8">für Proxmox-Cluster A</text>
+        <text x="88" y="955" fill="#94a3b8" font-size="8">+ K8s-A-PVs + übrige VMs</text>
+        <text x="88" y="972" fill="#94a3b8" font-size="8">KEIN Sync nach B</text>
+        <text x="88" y="989" fill="#94a3b8" font-size="8">eigener Pool / Host-Gruppe</text>
+        <text x="88" y="1006" fill="#94a3b8" font-size="8">→ bleibt bei Standortausfall weg</text>
+        <rect x="370" y="896" width="310" height="152" rx="8" fill="#0f172a"/>
+        <rect x="370" y="896" width="310" height="152" rx="8" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="388" y="918" fill="#a78bfa" font-size="9" font-weight="600">LUNs „Metro“ (gespiegelt)</text>
+        <text x="388" y="938" fill="#a78bfa" font-size="8">für den gestreckten Cluster</text>
+        <text x="388" y="955" fill="#a78bfa" font-size="8">VM-Disks + K8s-Stretch-PVs</text>
+        <text x="388" y="972" fill="#a78bfa" font-size="8">synchron gegen System B</text>
+        <text x="388" y="989" fill="#a78bfa" font-size="8">Peer Persistence (Active/Active)</text>
+        <text x="388" y="1006" fill="#a78bfa" font-size="8">→ transparentes Failover, RPO 0</text>
+        <rect x="760" y="864" width="650" height="196" rx="8" fill="#0f172a"/>
+        <rect x="760" y="864" width="650" height="196" rx="8" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="780" y="886" fill="#a78bfa" font-size="11" font-weight="600">System B — Standort B</text>
+        <rect x="1130" y="896" width="280" height="152" rx="8" fill="#0f172a"/>
+        <rect x="1130" y="896" width="280" height="152" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="1148" y="918" fill="#94a3b8" font-size="9" font-weight="600">LUNs „lokal-only“</text>
+        <text x="1148" y="938" fill="#94a3b8" font-size="8">für Proxmox-Cluster B</text>
+        <text x="1148" y="955" fill="#94a3b8" font-size="8">+ K8s-B-PVs + übrige VMs</text>
+        <text x="1148" y="972" fill="#94a3b8" font-size="8">KEIN Sync nach A</text>
+        <text x="1148" y="989" fill="#94a3b8" font-size="8">eigener Pool / Host-Gruppe</text>
+        <text x="1148" y="1006" fill="#94a3b8" font-size="8">→ bleibt bei Standortausfall weg</text>
+        <rect x="780" y="896" width="310" height="152" rx="8" fill="#0f172a"/>
+        <rect x="780" y="896" width="310" height="152" rx="8" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="798" y="918" fill="#a78bfa" font-size="9" font-weight="600">LUNs „Metro“ (gespiegelt)</text>
+        <text x="798" y="938" fill="#a78bfa" font-size="8">für den gestreckten Cluster</text>
+        <text x="798" y="955" fill="#a78bfa" font-size="8">VM-Disks + K8s-Stretch-PVs</text>
+        <text x="798" y="972" fill="#a78bfa" font-size="8">synchron gegen System A</text>
+        <text x="798" y="989" fill="#a78bfa" font-size="8">Peer Persistence (Active/Active)</text>
+        <text x="798" y="1006" fill="#a78bfa" font-size="8">→ transparentes Failover, RPO 0</text>
+        <text x="730" y="957" fill="#a78bfa" font-size="8" text-anchor="middle">Metro-Sync</text>
+        <line x1="702" y1="972" x2="758" y2="972" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
+        <line x1="758" y1="988" x2="702" y2="988" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
+        <text x="730" y="1004" fill="#a78bfa" font-size="8" text-anchor="middle">synchron</text>
+        <rect x="30" y="1100" width="1400" height="100" rx="8" fill="#0f172a"/>
+        <rect x="30" y="1100" width="1400" height="100" rx="8" fill="rgba(120, 53, 15, 0.28)" stroke="#fbbf24" stroke-width="1.5"/>
+        <rect x="50" y="1112" width="660" height="76" rx="8" fill="#0f172a"/>
+        <rect x="50" y="1112" width="660" height="76" rx="8" fill="rgba(120, 53, 15, 0.28)" stroke="#fbbf24" stroke-width="1.5"/>
+        <a href="https://opentofu.org/" target="_blank">
+        <text x="70" y="1136" fill="#fbbf24" font-size="11" font-weight="600">OpenTofu</text>
+        </a>
+        <text x="70" y="1156" fill="#94a3b8" font-size="8">Provisioning + Config-Management: Proxmox-VMs/-Container (Provider bpg/proxmox),</text>
+        <text x="70" y="1172" fill="#94a3b8" font-size="8">Hosts, Netzwerk-Baseline, VM-Konfiguration · State zentral + verschlüsselt (3-2-1 gesichert)</text>
+        <rect x="750" y="1112" width="660" height="76" rx="8" fill="#0f172a"/>
+        <rect x="750" y="1112" width="660" height="76" rx="8" fill="rgba(120, 53, 15, 0.28)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="770" y="1136" fill="#fbbf24" font-size="11" font-weight="600">Uyuni (Salt)</text>
+        <text x="770" y="1156" fill="#94a3b8" font-size="8">Patch-Management außerhalb Kubernetes: VM-Patches, States für die DB-Backup-Skripte</text>
+        <text x="770" y="1172" fill="#94a3b8" font-size="8">(pre-freeze / post-thaw), Server-Härtung — eine zentrale Konfiguration für beide Standorte</text>
+        <rect x="30" y="1220" width="685" height="260" rx="8" fill="#0f172a"/>
+        <rect x="30" y="1220" width="685" height="260" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="50" y="1244" fill="#fbbf24" font-size="11" font-weight="600">Cluster-Topologie &amp; Quorum</text>
+        <text x="50" y="1268" fill="#94a3b8" font-size="8">• Zwei eigenständige Proxmox-Cluster (A, B): je eigenes Quorum,</text>
+        <text x="50" y="1283" fill="#94a3b8" font-size="8">  kein gemeinsames Quorum über die Standorte</text>
+        <text x="50" y="1298" fill="#fb7185" font-size="8">• Zusätzlich EIN gestreckter Proxmox-Cluster über beide Standorte</text>
+        <text x="50" y="1313" fill="#fb7185" font-size="8">  (enthält VMs und einen Kubernetes-Cluster)</text>
+        <text x="50" y="1328" fill="#a78bfa" font-size="8">• Gestreckt: Corosync läuft über den Metro-Link → Latenz-Budget</text>
+        <text x="50" y="1343" fill="#a78bfa" font-size="8">  &lt; 5 ms einhalten, Timeouts messen (Ziel: token + consensus &lt; 45 s)</text>
+        <text x="50" y="1358" fill="#a78bfa" font-size="8">• 3. Stimme für den gestreckten Cluster: Corosync-QDevice außerhalb</text>
+        <text x="50" y="1373" fill="#a78bfa" font-size="8">  beider Standorte — über TCP/IP, nicht ans 5-ms-Budget gebunden</text>
+        <text x="50" y="1388" fill="#34d399" font-size="8">• Link A↔B fällt aus: die lokalen Cluster laufen unverändert weiter;</text>
+        <text x="50" y="1403" fill="#34d399" font-size="8">  der gestreckte verliert Quorum → kein automatischer VM-Start,</text>
+        <text x="50" y="1418" fill="#34d399" font-size="8">  die Entscheidung liegt beim QDevice</text>
+        <text x="50" y="1433" fill="#94a3b8" font-size="8">• etcd der lokalen K8s-Cluster ist standortlokal → kein Quorum</text>
+        <text x="50" y="1448" fill="#94a3b8" font-size="8">  über den Metro-Link, kein Split-Brain-Risiko</text>
+        <rect x="745" y="1220" width="685" height="260" rx="8" fill="#0f172a"/>
+        <rect x="745" y="1220" width="685" height="260" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="765" y="1244" fill="#fbbf24" font-size="11" font-weight="600">etcd — Platzierung (offene Entscheidung)</text>
+        <text x="765" y="1268" fill="#34d399" font-size="8">• etcd ist KEIN Single-Server: 3 Mitglieder (toleriert 1 Ausfall) bzw.</text>
+        <text x="765" y="1283" fill="#34d399" font-size="8">  5 (toleriert 2) — immer ungerade, jedes Mitglied auf eigenem Host</text>
+        <text x="765" y="1298" fill="#34d399" font-size="8">• Raft: jeder Write braucht die Mehrheit → die Schreiblatenz hängt</text>
+        <text x="765" y="1313" fill="#34d399" font-size="8">  am langsamsten Mitglied. Ein einzelner etcd = kein HA, kein DR</text>
+        <text x="765" y="1328" fill="#fb7185" font-size="8">• Mitglieder über beide Standorte verteilt = Quorum-Falle</text>
+        <text x="765" y="1343" fill="#fb7185" font-size="8">  (2+1 aufgeteilt: stirbt die 2er-Seite, ist der Cluster offline)</text>
+        <text x="765" y="1358" fill="#34d399" font-size="8">• Empfehlung: ALLE Mitglieder an EINEM Standort → Quorum bleibt sicher</text>
+        <text x="765" y="1373" fill="#94a3b8" font-size="8">• Davon unabhängig: WO die etcd-Disk liegt</text>
+        <text x="765" y="1388" fill="#94a3b8" font-size="8">   – lokal (Node-NVMe oder lokaler Alletra-LUN): schnellste Schreibraten,</text>
+        <text x="765" y="1403" fill="#94a3b8" font-size="8">     aber bei Standortverlust nur per Snapshot wiederherstellbar</text>
+        <text x="765" y="1418" fill="#a78bfa" font-size="8">   – Metro-LUN: Daten liegen am anderen Standort schon vor → Proxmox</text>
+        <text x="765" y="1433" fill="#a78bfa" font-size="8">     startet die etcd-VMs dort neu, etcd findet seinen Stand wieder</text>
+        <text x="765" y="1448" fill="#22d3ee" font-size="8">• Test offen: Metro-LUN + Jumbo Frames 9000. Messen:</text>
+        <text x="765" y="1463" fill="#22d3ee" font-size="8">  etcd_disk_wal_fsync_duration_seconds p99 (&lt; 10 ms) und</text>
+        <text x="765" y="1478" fill="#22d3ee" font-size="8">  etcd_server_leader_changes_seen_total muss flach bleiben</text>
+        <text x="765" y="1493" fill="#fb7185" font-size="8">• Jumbo Frames senken den Paket-Overhead — NICHT die Signallaufzeit</text>
+        <rect x="30" y="1500" width="685" height="260" rx="8" fill="#0f172a"/>
+        <rect x="30" y="1500" width="685" height="260" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="50" y="1524" fill="#fbbf24" font-size="11" font-weight="600">Storage-Doppelnutzung — lokal und Metro auf denselben Systemen</text>
+        <text x="50" y="1548" fill="#a78bfa" font-size="8">• Jede Alletra trägt ZWEI LUN-Klassen auf demselben System</text>
+        <text x="50" y="1563" fill="#94a3b8" font-size="8">• lokal-only: für den standorteigenen Proxmox-Cluster und dessen</text>
+        <text x="50" y="1578" fill="#94a3b8" font-size="8">  K8s-PVs — KEIN Sync zwischen System A und System B</text>
+        <text x="50" y="1593" fill="#a78bfa" font-size="8">• Metro: die beiden Systeme sind zu einem Peer-Persistence-Paar</text>
+        <text x="50" y="1608" fill="#a78bfa" font-size="8">  verbunden und spiegeln synchron → für den gestreckten Cluster</text>
+        <text x="50" y="1623" fill="#fb7185" font-size="8">• Sauber trennen: getrennte Pools / Host-Gruppen je LUN-Klasse,</text>
+        <text x="50" y="1638" fill="#fb7185" font-size="8">  damit lokal-only nie versehentlich mitgespiegelt wird</text>
+        <text x="50" y="1653" fill="#94a3b8" font-size="8">• Anbindung: iSCSI / FC / NVMe-oF (FC oder TCP)</text>
+        <text x="50" y="1668" fill="#94a3b8" font-size="8">• Dual-Fabric: zwei getrennte Switches, je eigener Host-Port</text>
+        <text x="50" y="1683" fill="#94a3b8" font-size="8">• Multipath im Gast: dm-multipath bzw. nativer NVMe-Multipath</text>
+        <text x="50" y="1698" fill="#34d399" font-size="8">• K8s-PVs: HPE CSI Driver — Active Peer Persistence liefert</text>
+        <text x="50" y="1713" fill="#34d399" font-size="8">  automatische Workload-Recovery beim Array-Failover</text>
+        <text x="50" y="1728" fill="#fb7185" font-size="8">• Der Metro-Link trägt Corosync UND den Storage-Spiegel → getrennt</text>
+        <text x="50" y="1743" fill="#fb7185" font-size="8">  planen (QoS); Storage-Traffic nicht mit Corosync mischen</text>
+        <rect x="745" y="1500" width="685" height="260" rx="8" fill="#0f172a"/>
+        <rect x="745" y="1500" width="685" height="260" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="765" y="1524" fill="#fbbf24" font-size="11" font-weight="600">Backup &amp; Notfall</text>
+        <text x="765" y="1548" fill="#94a3b8" font-size="8">• VMs: Proxmox Backup Server — dedupliziert, verschlüsselt;</text>
+        <text x="765" y="1563" fill="#94a3b8" font-size="8">  Restore-Tests terminiert und protokolliert (ISO 27001)</text>
+        <text x="765" y="1578" fill="#22d3ee" font-size="8">• Kubernetes: Velero → MinIO (S3) — Objekte + PVs</text>
+        <text x="765" y="1593" fill="#22d3ee" font-size="8">  (Array-Snapshots), Cross-Site-Restore</text>
+        <text x="765" y="1608" fill="#34d399" font-size="8">• Datenbanken: native Dumps (pg_dump) + CloudNativePG-Backup</text>
+        <text x="765" y="1623" fill="#34d399" font-size="8">  (WAL/Barman) → Recovery-Punkt im Sekundenbereich</text>
+        <text x="765" y="1638" fill="#34d399" font-size="8">• Übernahme nach Standort B bei DBs per Replikation</text>
+        <text x="765" y="1653" fill="#34d399" font-size="8">  (CloudNativePG bzw. Patroni) — NICHT per Restore</text>
+        <text x="765" y="1668" fill="#fb7185" font-size="8">• Restore = Sicherheitsnetz gegen logische Fehler (DROP, Bug,</text>
+        <text x="765" y="1683" fill="#fb7185" font-size="8">  Ransomware) und für terminierte DR-Übungen — kein Übernahme-Pfad</text>
+        <text x="765" y="1698" fill="#94a3b8" font-size="8">• Steuerungsebene mitsichern: GitLab, Harbor, ArgoCD, Vault, MinIO</text>
+        <text x="765" y="1713" fill="#94a3b8" font-size="8">  (3-2-1, WORM/Offsite)</text>
+        <text x="765" y="1728" fill="#94a3b8" font-size="8">• Veeam entfällt (kein VMware mehr) — PBS + Velero übernehmen</text>
+        <rect x="30" y="1780" width="1400" height="120" rx="8" fill="#0f172a"/>
+        <rect x="30" y="1780" width="1400" height="120" rx="8" fill="rgba(120, 53, 15, 0.28)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="50" y="1804" fill="#fbbf24" font-size="11" font-weight="600">Offene Entscheidungen</text>
+        <text x="50" y="1826" fill="#94a3b8" font-size="8">• etcd-Ablage nach Messwerten entscheiden (lokal vs. Metro-LUN + Jumbo Frames) — Kriterien: p99-fsync und Leader-Changes</text>
+        <text x="50" y="1842" fill="#94a3b8" font-size="8">• Failover-Runbook für den gestreckten Cluster: Reihenfolge festlegen (QDevice-Freigabe abwarten, dann etcd-VMs/Workloads im Rest-Standort starten)</text>
+        <text x="50" y="1858" fill="#94a3b8" font-size="8">• RTO/RPO-Ziele aus einer BIA ableiten (z. B. RPO ≤ 1 h, RTO ≤ 4 h) — ohne Zielwerte ist KRITIS-Konformität nicht belegbar</text>
+        <text x="50" y="1874" fill="#94a3b8" font-size="8">• Die beiden lokalen K8s-Cluster: logischer Verbund via ClusterMesh oder bewusst getrennt? (CloudNativePG repliziert auf Anwendungsebene)</text>
+        <text x="50" y="1890" fill="#94a3b8" font-size="8">• SSO/OIDC + MFA durchgängig · Audit-Log-Retention ≥ 6–12 Monate · etcd-Snapshots sichern</text>
+        <text x="50" y="1924" fill="#94a3b8" font-size="10" font-weight="600">Legende</text>
+        <rect x="50" y="1934" width="16" height="10" rx="2" fill="#0f172a"/>
+        <rect x="50" y="1934" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="72" y="1943" fill="#94a3b8" font-size="8">Kubernetes-Cluster</text>
+        <rect x="260" y="1934" width="16" height="10" rx="2" fill="#0f172a"/>
+        <rect x="260" y="1934" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="282" y="1943" fill="#94a3b8" font-size="8">Proxmox / VMs</text>
+        <rect x="450" y="1934" width="16" height="10" rx="2" fill="#0f172a"/>
+        <rect x="450" y="1934" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="472" y="1943" fill="#94a3b8" font-size="8">Storage / Metro</text>
+        <rect x="640" y="1934" width="16" height="10" rx="2" fill="#0f172a"/>
+        <rect x="640" y="1934" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.28)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="662" y="1943" fill="#94a3b8" font-size="8">IaC + Patch (OpenTofu / Uyuni)</text>
+        <rect x="940" y="1934" width="16" height="10" rx="2" fill="#0f172a"/>
+        <rect x="940" y="1934" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="962" y="1943" fill="#94a3b8" font-size="8">Gestreckt / HA</text>
+        <rect x="1120" y="1934" width="16" height="10" rx="2" fill="#0f172a"/>
+        <rect x="1120" y="1934" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="1142" y="1943" fill="#94a3b8" font-size="8">Mess-/Test-Kriterium</text>
       </svg>
     </div>
 
-    <!-- Info Cards -->
     <div class="cards">
       <div class="card">
-        <div class="card-header">
-          <div class="card-dot amber"></div>
-          <h3>Hardware</h3>
-        </div>
+        <div class="card-header"><div class="card-dot amber"></div><h3>Topologie</h3></div>
         <ul>
-          <li>• Enterprise-Server (z.B. HPE Gen10) → <a href="https://www.proxmox.com/" target="_blank">Proxmox VE</a></li>
-          <li>• 2 Ressourcen-Pools (Datacenter A, Datacenter B)</li>
-          <li>• Multi-100-Gb/s Metro-Link</li>
-          <li>• Cisco ACI als L3-Transport</li>
-          <li>• Storage: <a href="https://www.hpe.com/de/de/storage/alletra-storage-mp.html" target="_blank">HPE Alletra MP B10000</a> (Block: iSCSI/FC/NVMe-oF) als Metro-Paar</li>
-          <li>• Lokal: NVMe für Betriebssystem + etcd (K8s-Cluster-State)</li>
+          <li>• 2 eigenständige <a href="https://www.proxmox.com/" target="_blank">Proxmox</a>-Cluster (A, B) auf lokalem Alletra-Storage — <strong>kein Storage-Sync</strong></li>
+          <li>• Zusätzlich 1 gestreckter Proxmox-Cluster über beide Standorte (VMs + Kubernetes)</li>
+          <li>• 3 Kubernetes-Cluster: K8s-A, K8s-B, K8s-Stretch</li>
+          <li>• DB-Replikation zwischen A und B: <a href="https://cloudnative-pg.io/" target="_blank">CloudNativePG</a> auf Anwendungsebene</li>
         </ul>
       </div>
 
       <div class="card">
-        <div class="card-header">
-          <div class="card-dot emerald"></div>
-          <h3>Kubernetes</h3>
-        </div>
+        <div class="card-header"><div class="card-dot violet"></div><h3>Storage</h3></div>
         <ul>
-          <li>• 4 Cluster: Prod-1 (aktiv), Prod-2 (DR), Test, Quality</li>
-          <li>• Nodes = VMs im Proxmox-Pool (<a href="https://www.talos.dev/" target="_blank">Talos Linux</a> oder <a href="https://docs.rke2.io/" target="_blank">RKE2</a>)</li>
-          <li>• <a href="https://cilium.io/" target="_blank">Cilium</a> CNI + NetworkPolicies, <a href="https://github.com/cilium/hubble" target="_blank">Hubble</a> Observability</li>
-          <li>• ClusterMesh für standortunabhängige Services</li>
-          <li>• Tenants = Namespaces + RBAC</li>
+          <li>• <a href="https://www.hpe.com/de/de/storage/alletra-storage-mp.html" target="_blank">HPE Alletra MP B10000</a>, 2 Systeme — LUNs <em>lokal-only</em> und <em>Metro</em> auf denselben Arrays</li>
+          <li>• Block: iSCSI / FC / NVMe-oF (FC oder TCP), Dual-Fabric + Multipath</li>
+          <li>• K8s-PVs via <a href="https://scod.hpedev.io/csi_driver/" target="_blank">HPE CSI Driver</a> (Active Peer Persistence)</li>
+          <li>• Metro-Paar: Peer Persistence, synchron gespiegelt, RPO 0</li>
         </ul>
       </div>
 
       <div class="card">
-        <div class="card-header">
-          <div class="card-dot violet"></div>
-          <h3>Storage &amp; DR</h3>
-        </div>
+        <div class="card-header"><div class="card-dot emerald"></div><h3>Betrieb &amp; Notfall</h3></div>
         <ul>
-          <li>• <a href="https://www.hpe.com/de/de/storage/alletra-storage-mp.html" target="_blank">HPE Alletra MP B10000</a> als Metro-Paar — 2 Systeme, Peer Persistence</li>
-          <li>• Gestreckter Proxmox-Cluster für VMs (Corosync + QDevice am 3. Standort)</li>
-          <li>• K8s-PVs via <a href="https://scod.hpedev.io/csi_driver/" target="_blank">HPE CSI Driver</a> · DB-Replikation <a href="https://cloudnative-pg.io/" target="_blank">CloudNativePG</a> (K8s) / Patroni (VM-DBs)</li>
-          <li>• <a href="https://velero.io/" target="_blank">Velero</a> + <a href="https://www.proxmox.com/en/proxmox-backup-server" target="_blank">Proxmox Backup Server</a> + <a href="https://min.io/" target="_blank">MinIO</a></li>
-          <li>• etcd lokal auf NVMe (nie auf dem Metro-Storage)</li>
-          <li>• Veeam wird durch Proxmox Backup Server + Velero ersetzt</li>
+          <li>• IaC: <a href="https://opentofu.org/" target="_blank">OpenTofu</a> (Provider bpg/proxmox) · Patch-Management: Uyuni (Salt)</li>
+          <li>• Backup: <a href="https://www.proxmox.com/en/proxmox-backup-server" target="_blank">PBS</a> (VMs), <a href="https://velero.io/" target="_blank">Velero</a> → <a href="https://min.io/" target="_blank">MinIO</a> (K8s), CloudNativePG-Backup (DBs)</li>
+          <li>• Übernahme per Replikation — Restore nur als Sicherheitsnetz</li>
+          <li>• etcd: 3 Mitglieder, alle an einem Standort; Ablage in Test</li>
         </ul>
       </div>
     </div>
 
-    <!-- Footer -->
     <p class="footer">
-      KRITIS Zielarchitektur · Proxmox VE + Kubernetes (Talos/RKE2) + Cilium/Hubble + HPE Alletra MP (Metro-Storage) · GitOps für Cluster, OpenTofu für Infrastruktur · Links öffnen offizielle Seiten · Stand 2026-10
+      KRITIS Zielarchitektur · 2 Standorte + gestreckter Proxmox-Cluster · HPE Alletra MP B10000 (lokal + Metro)<br>
+      Kubernetes + Cilium/Hubble · GitOps für Cluster-Inhalte, OpenTofu für Infrastruktur, Uyuni für Patches · Links öffnen offizielle Seiten · Stand 2026-10
     </p>
   </div>
-  <script>
-    function setMode(mode) {
-      document.querySelectorAll('.mode-passiv').forEach(el => el.style.display = (mode === 'passiv') ? '' : 'none');
-      document.querySelectorAll('.mode-aktiv').forEach(el => el.style.display = (mode === 'aktiv') ? '' : 'none');
-      document.getElementById('banner-passiv').style.display = (mode === 'passiv') ? 'block' : 'none';
-      document.getElementById('banner-aktiv').style.display = (mode === 'aktiv') ? 'block' : 'none';
-      document.getElementById('btn-passiv').classList.toggle('active', mode === 'passiv');
-      document.getElementById('btn-aktiv').classList.toggle('active', mode === 'aktiv');
-    }
-  </script>
 </body>
 </html>
