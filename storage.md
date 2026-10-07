@@ -171,46 +171,54 @@ Drei Punkte, die dabei überraschen:
 
 **Szenario:** HPE Alletra B10000 + PBS
 
-**Bewertungskriterien:** 1–10, unter Berücksichtigung des Szenarios. **Höher = besser — mit einer Ausnahme: „Komplexität" ist umgekehrt skaliert (niedriger = einfacher/besser).**
+### 3.1 Kriterien, Gewichtung und Rechenweg
 
-**Reihenfolge:** absteigend nach *Gesamt-Eignung im Ziel-Szenario* — nicht nach Performance. Betriebsrisiko und Passung zur geplanten **Doppelnutzung der Arrays** (lokale *und* Metro-LUNs auf denselben Systemen) zählen gleichwertig mit. Wo eine Zeile fehlt (etwa „NVMe-oF/RDMA"), bietet die B10000 sie nicht an — siehe [2.4](#24-nvme-of-im-detail--die-transporte).
+Alle Kriterien sind auf **1–10 skaliert und so gerichtet, dass höher = besser** ist — nur dann lässt sich eine Gesamtnote überhaupt addieren. Daraus folgt für die Komplexität: **eine niedrige Komplexität ergibt eine hohe Punktzahl, eine hohe Komplexität eine niedrige.** Die Spalte ist dementsprechend als *„Komplexität (invertiert)"* ausgewiesen und nicht als Komplexitätsgrad.
 
-**Neu bewertet am 2026-10-07** nach dem Belegdurchgang. Was sich gegenüber der ersten Fassung geändert hat und warum:
+| Kriterium | Gewicht | Warum dieses Gewicht |
+|---|---|---|
+| Shared / Metro geeignet | **25 %** | Harte Anforderung — ohne echten Shared-Storage gibt es kein HA und keine Live-Migration |
+| HA / Live-Migration | **20 %** | Kern des gestreckten Clusters |
+| Resilienz bei Netzfehlern (Linux-VMs) | **20 %** | Im gestreckten Szenario das praktische Ausfallrisiko Nr. 1 |
+| Performance | **15 %** | wichtig, aber selten der Engpass gegenüber Shared-Fähigkeit |
+| Komplexität (invertiert) | **10 %** | Betriebsaufwand und Fehlerquelle |
+| Snapshots (Proxmox) | 5 % | wichtig, aber über Array-Snapshots bzw. Volume-Chain abdeckbar |
+| PBS-Integration | 5 % | PBS dockt ohnehin an fast alles an |
 
-| Änderung | Grund |
-|---|---|
-| **Komplexität** war widersprüchlich deklariert | Die Spalte war „höher = besser" überschrieben, die Werte waren aber „niedriger = einfacher" (NFS = 3, ZFS over iSCSI = 8). Die Skalierung ist jetzt explizit benannt |
-| **NVMe-oF/TCP: Komplexität 5 → 7** | kein Proxmox-Storage-Typ (CLI-Anbindung, Persistenz, Diagnose), NQN-Trennung ist Pflicht und Firmware-Gate — **aufwendiger als iSCSI**, nicht einfacher |
-| **NVMe-oF/FC: Gesamt 9,7 → 9,5** | dasselbe Firmware-Gate gilt auch für FC-NVMe (Advisory a00150116), FC-Fabric nötig, ebenfalls kein Proxmox-Storage-Typ |
-| **Snapshots auf LVM: 4–7 → 5–8** | PVE 9 kann Volume-Chain-Snapshots, verlangt aber **thin + discard** im Unterbau (Technologie-Vorschau) — Thin kommt aus der CPG, ist hier also erfüllbar |
-| Firmware-Voraussetzung als **Betriebs-Gate** aufgenommen | Beide NVMe-Transporte brauchen **OS ≥ 10.5.50**, sonst bleiben Deallocate-Blöcke „stranded" (Auslastung steigt schleichend) |
-| **Ethernet-Ports präzisiert** | je Adapter 4 bzw. 2 Ports (ab 10.6 bis 10 einzeln) — der Port-Nachteil ist **kleiner** als zuerst dargestellt, bleibt aber gegenüber den bis zu 12 FC-Ports/Node |
+**Rechnung:** `Gesamt = Σ (Gewicht × Kriterienwert)`, gerundet auf eine Nachkommastelle. **Wertebereiche** (z. B. „5–8") gehen mit ihrem **Mittelwert** ein. Die Gewichte sind eine begründete Setzung, keine Messung — die Tabelle ist deshalb reproduzierbar: andere Gewichte, nachrechenbares anderes Ergebnis (siehe 3.3).
 
-**Ergebnis der Neubewertung:** NVMe/FC, iSCSI+LVM und FC+LVM liegen **gleichauf bei 9,5** — sie sind für dieses Szenario praktisch gleichwertig stark. Entschieden wird nicht über die Punkte, sondern über **Fabric-Vorhandensein und Betriebsrisiko**: NVMe/FC gewinnt bei Performance und Array-Ports, iSCSI bei Einfachheit und Risiko. NVMe/TCP fällt auf 9,2 (mehr Aufwand, Firmware-Gate, NQN-Pflicht).
+### 3.2 Ergebnis
 
-| Storage-Typ | Shared / Metro geeignet | Snapshots (Proxmox) | Performance | Komplexität | HA / Live-Migration | Resilienz bei Netzfehlern (Linux-VMs) | PBS-Integration | Gesamt-Eignung Enterprise Stretched | Empfehlung für dein Setup |
+| Storage-Typ | Shared / Metro geeignet | HA / Live-Migration | Resilienz bei Netzfehlern (Linux-VMs) | Performance | Komplexität (invertiert) | Snapshots (Proxmox) | PBS-Integration | Gesamt-Eignung im Ziel-Szenario | Empfehlung für dein Setup |
 |---|---|---|---|---|---|---|---|---|---|
-| **NVMe-oF/FC + LVM** | 10 | 5–8 ¹ | **10** | 7 | 10 | **10** (natives Multipath) | 8 | **9.5** | **Beste Performance** (HBA-Offload, bis 12 Ports/Node) — FC-Fabric nötig, FW-Gate ⁵ |
-| **iSCSI + LVM (Thick)** | 10 (Alletra nativ) | 5–8 ¹ | 9 | **5** | 10 | **9–10** (Multipath) | 8 | **9.5** | **Primär empfohlen** — nativ in Proxmox, kein NQN-Risiko, geringste Komplexität ⁴ |
-| **FC + LVM** | 10 | 5–8 ¹ | 9.5 | **5** | 10 | **9–10** | 8 | **9.5** | Sehr gut — ohne NVMe-Komplexität; Boot from SAN/Direct Connect möglich ⁶ |
-| **NVMe-oF/TCP + LVM** | 10 | 5–8 ¹ | 9.5 | **7** | 10 | **9.5** (natives Multipath) | 8 | **9.2** | Ohne FC-Fabric — mehr Aufwand (kein PVE-Typ), FW-Gate ⁵, NQN-Trennung Pflicht ³ ⁴ |
-| **NFS (Alletra File)** | 9 | 6–8 ² | 7–8 | **3** | 9 | 6–7 (weniger robust bei Path-Fail) | 9 | 7.5 | Gut für ISO/Templates |
-| **ZFS over iSCSI** | 9 | **10** | 8 | 8 | 9 | 7–8 | 8 | 7.5 | Möglich, aber komplex |
-| **Ceph RBD** | 8 (eigene Stretch-Mode) | **10** | 8–9 | 8–9 | 10 | 8 (eigene Replikation) | 9 | 7–8 | Nur wenn Hyperconverged |
-| **CephFS** | 8 | 9 | 7 | 8 | 9 | 7 | 8 | 6.5 | Optional File |
-| **ZFS lokal + Replication** | 3 | **10** | **9–10** | 5 | 4 (async) | 5 (kein Shared) | **10** | 5 | Nur ergänzend |
-| **Directory / CIFS** | 2–7 | 5–7 | 5–7 | 2 | 2–7 | 4–6 | 9 | 4 | Nur ISO/Backup |
-| **LVM-Thin lokal** | 1 | 9 | 9 | 3 | 1 | 3 | 8 | 3 | Nicht für HA — `lvmthin` ist **kein** shared Storage |
-| **ZFS auf Shared-LUN** (NVMe-oF/iSCSI-LUN + `zpool`) | 1 | 10 | **9** | 6 | **1** | 3 | **10** | **2** | **Nein** — ZFS ist nicht cluster-aware, siehe [4.4](#44-zfs-lokal--replication--und-warum-nvme-of--zfs-kein-shared-storage-ist) |
-| **PBS** | ja (Backup) | n/a | – | 3 | n/a | n/a | **10** | n/a | **Obligatorisch** |
+| **FC + LVM** | **10** | 5–8 | 9.5 | 6 | **10** | 9–10 | 8 | **8.5** | Sehr gut — ohne NVMe-Komplexität; Boot from SAN/Direct Connect möglich ⁶ |
+| **iSCSI + LVM (Thick)** | **10** | 5–8 | 9 | 6 | **10** | 9–10 | 8 | **8.4** | **Primär empfohlen** — nativ in Proxmox, kein NQN-Risiko, geringste Komplexität ⁴ |
+| **NVMe-oF/FC + LVM** | **10** | 5–8 | **10** | 4 | **10** | **10** | 8 | **8.3** | **Beste Performance** (HBA-Offload, bis 12 Ports/Node) — FC-Fabric nötig, FW-Gate ⁵ |
+| **NVMe-oF/TCP + LVM** | **10** | 5–8 | 9.5 | 4 | **10** | 9.5 | 8 | **8.2** | Ohne FC-Fabric — mehr Aufwand (kein PVE-Typ), FW-Gate ⁵, NQN-Trennung Pflicht ³ ⁴ |
+| **NFS (Alletra File)** | 9 | 6–8 | 7–8 | 8 | 9 | 6–7 | 9 | **8.0** | Gut für ISO/Templates |
+| **ZFS over iSCSI** | 9 | **10** | 8 | 3 | 9 | 7–8 | 8 | **8.0** | Möglich, aber komplex |
+| **Ceph RBD** | 8 | **10** | 8–9 | 2–3 | **10** | 8 | 9 | **7.9** | Nur wenn Hyperconverged |
+| **CephFS** | 8 | 9 | 7 | 3 | 9 | 7 | 8 | **7.3** | Optional File |
+| **ZFS lokal + Replication** | 3 | **10** | 9–10 | 6 | 4 | 5 | **10** | **6.7** | Nur ergänzend |
+| **Directory / CIFS** | 2–7 | 5–7 | 5–7 | **9** | 2–7 | 4–6 | 9 | **6.0** | Nur ISO/Backup |
+| **LVM-Thin lokal** | 1 | 9 | 9 | 8 | 1 | 3 | 8 | **5.7** | Nicht für HA — `lvmthin` ist **kein** shared Storage |
+| **ZFS auf Shared-LUN** (NVMe-oF/iSCSI-LUN + `zpool`) | 1 | **10** | 9 | 5 | 1 | 3 | **10** | **5.5** | **Nein** — ZFS ist nicht cluster-aware, siehe [4.4](#44-zfs-lokal--replication--und-warum-nvme-of--zfs-kein-shared-storage-ist) |
+| **PBS** | ja (Backup) | n/a | – | **8** | n/a | n/a | **10** | n/a | **Obligatorisch** (eigene Backup-Schicht) |
+
+### 3.3 Wie belastbar ist das Ergebnis?
+
+- **Die vier Block-Optionen liegen innerhalb von 0,3 Punkten** (8,5 / 8,4 / 8,3 / 8,2). Das Modell kürt hier **keinen Sieger** — die Punktunterschiede liegen unterhalb der Unsicherheit der Gewichte. Die Kriterien trennen sauber zwischen *Shared-Block* und *allem anderen*, nicht zwischen NVMe/FC, FC, iSCSI und NVMe/TCP.
+- **Kippt man die Gewichtung** (z. B. Performance 25 %, Komplexität 5 %), verschiebt sich die Reihenfolge zugunsten von NVMe/FC. Die Entscheidung fällt also **nicht über Punkte, sondern über zwei harte Randbedingungen:** Ist ein **FC-Fabric** vorhanden? Und welches **Betriebsrisiko** will man tragen (Firmware-Gate ⁵, NQN-Trennung ⁴)?
+- **Ohne FC** bleibt von der Spitzengruppe **iSCSI + LVM** — und für die Metro-Klasse entweder iSCSI auf getrenntem Port-Set oder NVMe/TCP mit dem Port-Persona-Split (Design-Vorlage in [`checkliste-storage.md`](checkliste-storage.md)).
+- **PBS** steht in der Tabelle außer Konkurrenz: es ist keine Ablage für laufende VM-Disks, sondern die Backup-Schicht — **obligatorisch**, unabhängig vom Ergebnis oben.
 
 **Legende:**
 
 - ¹ Seit Proxmox VE 9 gibt es **Snapshot-as-Volume-Chain** für LVM — laut Doku *„vendor-agnostic support for snapshots on any storage system that supports block storage. This includes iSCSI and Fibre Channel-attached SANs"*. Voraussetzung ist **thin-provisioning *und* discard** im Unterbau (Thin kommt aus der CPG, siehe [2.5](#25-thin-provisioning--auf-welcher-schicht-entsteht-es)); es ist derzeit eine **Technologie-Vorschau** und die Snapshot-Volumes sind **thick** angelegt. Alternativ Array-seitige Snapshots (Alletra).
 - ² qcow2 oder Array-seitige Snapshots.
-- ³ Ethernet-Seite der Array: Ethernet je Adapter **4 Ports** (10/25GbE-4-Port-HBA: ab Werk 2× iSCSI + 2× NVMe/TCP) bzw. **2 Ports** (100GbE-2-Port-OCP: ab Werk 2× iSCSI); ab OS **10.6** bis zu **10 Frontend-Ethernet-Ports** einzeln als iSCSI **oder** NVMe/TCP — also deutlich weniger als die bis zu 12 FC-Ports/Node. Dazu mehr Host-CPU-Last als FC **und** der NQN-Fallstrick bei zwei LUN-Klassen auf denselben Arrays — siehe [4.1.2](#412-der-metro-paar-fallstrick). **NVMe/RDMA (RoCE) bietet die B10000 nicht.**
-- ⁴ **Warum iSCSI (9,5) vor NVMe/TCP (9,2) steht**, obwohl NVMe/TCP die bessere Latenz und nativen Multipath hat: (a) Auf der B10000 teilen sich beide **dieselben Ethernet-Ports der Array** — kein Port-Vorteil zueinander; (b) der **NQN/NDSID-Fallstrick tritt nur bei NVMe auf** — iSCSI kennt das Problem im SCSI-Namespace nicht; (c) **Proxmox hat einen nativen Storage-Typ `iscsi`**, aber **keinen** für NVMe-oF; (d) beide NVMe-Transporte brauchen **Firmware ≥ 10.5.50**. Wer den Fallstrick sauber löst (getrennte Port-Sets/Host-NQNs, Test nach [4.1.2](#412-der-metro-paar-fallstrick)) und die Firmware-Voraussetzung erfüllt, fährt mit NVMe/TCP technisch besser.
-- ⁵ **Firmware-Gate für beide NVMe-Transporte:** HPE Advisory **a00150116** — bis OS 10.5.x ohne Limit gesendete Deallocate-Requests (≥ 2 GB) liefen in **Timeouts**; ab 10.5.x kündigt die Array **max. 32 MB** pro Request an, größere werden **abgelehnt** und der Platz bleibt *„stranded within the current namespace"*. Betroffen sind **FC-NVMe und NVMe/TCP**. **Behoben in 10.5.50** → vor dem Produktivstart prüfen.
+- ³ Ethernet-Seite der Array: je Adapter **4 Ports** (10/25GbE-4-Port-HBA: ab Werk 2× iSCSI + 2× NVMe/TCP) bzw. **2 Ports** (100GbE-2-Port-OCP: ab Werk 2× iSCSI); ab OS **10.6** bis zu **10 Frontend-Ethernet-Ports** einzeln als iSCSI **oder** NVMe/TCP — also weniger als die bis zu 12 FC-Ports/Node, aber **mehr als zunächst dargestellt**. Dazu mehr Host-CPU-Last als FC. **NVMe/RDMA (RoCE) bietet die B10000 nicht.**
+- ⁴ **Warum iSCSI vor NVMe/TCP liegt**, obwohl NVMe/TCP die bessere Latenz und nativen Multipath hat: (a) beide teilen sich **dieselben Ethernet-Ports der Array** — kein Port-Vorteil zueinander; (b) der **NQN/NDSID-Fallstrick tritt nur bei NVMe auf** (iSCSI kennt ihn im SCSI-Namespace nicht); (c) Proxmox hat einen **nativen Storage-Typ `iscsi`**, aber **keinen** für NVMe-oF; (d) beide NVMe-Transporte brauchen **Firmware ≥ 10.5.50**. Wer den Fallstrick sauber löst (getrennte Port-Sets/Host-NQNs, Test nach [4.1.2](#412-der-metro-paar-fallstrick)) und das Firmware-Gate erfüllt, fährt mit NVMe/TCP technisch besser.
+- ⁵ **Firmware-Gate für beide NVMe-Transporte:** HPE Advisory **a00150116** — bis OS 10.5.x ohne Limit gesendete Deallocate-Requests (≥ 2 GB) liefen in **Timeouts**; ab 10.5.x kündigt die Array **max. 32 MB** pro Request an, größere werden **abgelehnt** und der Platz bleibt *„stranded within the current namespace"*. Betroffen sind **FC-NVMe und NVMe/TCP**. **Behoben in 10.5.50.**
 - ⁶ **Über FC unterstützt die B10000 Boot from SAN** (eigene Prozedur) **und Direct Connect** (bestimmte Host-Adapter ab 10.3.0, Punkt-zu-Punkt 16/32 Gbps); über **iSCSI und NVMe/TCP ist beides nicht unterstützt**. Für diese Architektur bleiben die Boot-Volumes lokal — die Option ist ein FC-Vorteil, kein Muss.
 
 ---
