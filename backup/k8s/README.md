@@ -13,13 +13,13 @@ In Kubernetes gibt es **zwei getrennte Sicherungsobjekte**, die unterschiedliche
 | Was | Beispiele | Sichert |
 |---|---|---|
 | **K8s-Objekte** | Deployments, StatefulSets, Services, Secrets, ConfigMaps, CRDs | die *Beschreibung* der Anwendung (YAML-Manifeste zur Laufzeit) |
-| **Daten (PVs)** | Persistent Volumes via ceph-csi (RBD-Images im Ceph-Pool) | die *Inhalte* — genau das, was die DB auf die Platte schreibt |
+| **Daten (PVs)** | Persistent Volumes via HPE CSI Driver (LUNs auf dem Alletra-Metro-Paar) | die *Inhalte* — genau das, was die DB auf die Platte schreibt |
 
 **Velero** ist das Werkzeug für beide: Es sichert K8s-Objekte und PV-Inhalte
 nach S3/MinIO und kann beides gezielt in einen anderen Cluster restoren
 (DR-Fall: Restore in Standort B). Das entspricht der "Objekte + Daten"-Ebene.
 
-**Aber:** Ein Velero-Backup (oder ein Ceph-Snapshot) ist zunächst nur
+**Aber:** Ein Velero-Backup (oder ein Array-Snapshot) ist zunächst nur
 *crash-consistent* — wie ein Stromausfall. Eine laufende PostgreSQL/MySQL
 befindet sich in einem Zustand, aus dem sie erst per WAL-/Redo-Replay
 wiederhergestellt werden muss. Für ein sauberes, wiederherstellbares Abbild
@@ -177,16 +177,16 @@ Siehe [ablauf-k8s-db-backup.svg](ablauf-k8s-db-backup.svg):
 
 1. **Velero** (Cluster A) startet das Backup (Scheduled oder manuell)
 2. **Pre-Hook** versetzt die DB in den Backup-Modus / erzeugt Dump
-3. **CSI-Snapshot** der PVCs (RBD-Snapshots im Ceph) oder Restic-Dateibackup
+3. **CSI-Snapshot** der PVCs (Array-Snapshots auf dem Alletra) oder Restic-Dateibackup
 4. **Upload** von Objekten + Daten nach **MinIO/S3** (in Standort A, Replikation nach B)
 5. **DB-Operator** (falls vorhanden) macht zusätzlich sein eigenes, konsistentes Backup (Dump + WAL) — unabhängig von Velero
-6. **Übernahme in Standort B (DR) — per Replikation, nicht per Restore:** Hot Standby/Active-Active heißt: Die Workloads laufen in B bereits, die DB-Replica ist da — Übernahme = Promotion + Route-Switch (GSLB), kein Restore. **Velero-Restore ist KEIN Übernahme-Pfad**, sondern das Sicherheitsnetz gegen Datenverlust (DROP, Bug, Ransomware) und für terminierte Restore-Tests. **Im Normalbetrieb kommt Standort B nicht über einen gemeinsamen Ceph-Speicher an die Daten** (Ceph ist pro DC getrennt), sondern über die **laufende async Replikation** (Patroni für PostgreSQL, DB-eigene Replikation für MySQL/MSSQL/MongoDB, optional RBD-Mirror) — siehe Box im Hauptdiagramm.
+6. **Übernahme in Standort B (DR) — per Replikation, nicht per Restore:** Hot Standby/Active-Active heißt: Die Workloads laufen in B bereits, die DB-Replica ist da — Übernahme = Promotion + Route-Switch (GSLB), kein Restore. **Velero-Restore ist KEIN Übernahme-Pfad**, sondern das Sicherheitsnetz gegen Datenverlust (DROP, Bug, Ransomware) und für terminierte Restore-Tests. **Für den Datenstand in B sorgen zwei getrennte Dinge:** Das **Alletra-Metro-Paar** hält die Volumes synchron in beiden Standorten (Storage-RPO 0), die **laufende async Replikation** hält die Datenbank konsistent (**CloudNativePG** für PostgreSQL in K8s, Patroni/DB-eigene Replikation für DBs in VMs) — siehe Box im Hauptdiagramm.
 
 ## 5. Rollen-Zusammenfassung
 
 | Komponente | Rolle | Pflicht? |
 |---|---|---|
-| Replikation nach B (Patroni / DB-eigene) | Hot Standby — sofortige Übernahme ohne Restore | **ja (Pflicht)** |
+| Replikation nach B (CloudNativePG / Patroni / DB-eigene) | Hot Standby — sofortige Übernahme ohne Restore | **ja (Pflicht)** |
 | Velero | Objekte + PVs, Backup-Sicherheitsnetz | **ja** |
 | Pre/Post-Hooks oder Stash | DB-Konsistenz (Dumps) für alle DBs | eine davon |
 | DB-Operator (CloudNativePG u. a.) | automatisches Failover + Backups + Upgrades | **optional** (bei RTO klein empfohlen) |

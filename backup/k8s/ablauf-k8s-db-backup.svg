@@ -34,18 +34,18 @@
   <text x="435" y="210" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">Objekte + PVs + Pre/Post-Hooks</text>
   <text x="435" y="226" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">Label-Selektor: app=postgres</text>
 
-  <!-- Ceph A -->
+  <!-- Alletra A -->
   <rect x="65" y="340" width="660" height="150" rx="8" fill="#0f172a"/>
   <rect x="65" y="340" width="660" height="150" rx="8" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-  <text x="85" y="364" fill="#ffffff" font-size="11" font-weight="600" font-family="'JetBrains Mono', monospace">Ceph-Cluster A — RBD-Pool</text>
-  <text x="85" y="384" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">PVC = RBD-Image (ceph-csi)</text>
-  <text x="85" y="402" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">CSI-Snapshot = RBD-Snapshot (crash-consistent)</text>
+  <text x="85" y="364" fill="#ffffff" font-size="11" font-weight="600" font-family="'JetBrains Mono', monospace">HPE Alletra MP B10000 — Block (Metro-Paar, synchron)</text>
+  <text x="85" y="384" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">PVC = LUN auf dem Alletra (HPE CSI Driver)</text>
+  <text x="85" y="402" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">CSI-Snapshot = Array-Snapshot (crash-consistent)</text>
   <text x="85" y="422" fill="#a78bfa" font-size="9" font-family="'JetBrains Mono', monospace">DB-Konsistenz kommt aus ② (Dump) — nicht aus dem Snapshot</text>
   <text x="85" y="442" fill="#34d399" font-size="8" font-family="'JetBrains Mono', monospace">Backup-PVC: Sidecar-Dump liegt hier (bei Stash)</text>
 
   <!-- Pfeile in Standort A -->
   <line x1="220" y1="300" x2="220" y2="340" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="230" y="322" fill="#94a3b8" font-size="8" font-family="'JetBrains Mono', monospace">PVC (RBD)</text>
+  <text x="230" y="322" fill="#94a3b8" font-size="8" font-family="'JetBrains Mono', monospace">PVC (Block)</text>
   <line x1="570" y1="300" x2="570" y2="340" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
   <text x="580" y="322" fill="#94a3b8" font-size="8" font-family="'JetBrains Mono', monospace">CSI-Snapshot</text>
 
@@ -58,13 +58,13 @@
 
   <!-- Upload-Pfeile -->
   <line x1="395" y1="490" x2="395" y2="610" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="405" y="555" fill="#94a3b8" font-size="8" font-family="'JetBrains Mono', monospace">Upload: Daten (RBD-Snapshots + Dumps)</text>
+  <text x="405" y="555" fill="#94a3b8" font-size="8" font-family="'JetBrains Mono', monospace">Upload: Daten (Array-Snapshots + Dumps)</text>
   <line x1="725" y1="240" x2="835" y2="610" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
   <text x="690" y="515" fill="#94a3b8" font-size="8" font-family="'JetBrains Mono', monospace">Upload: K8s-Objekte</text>
 
   <!-- Laufende async Replikation A -> B (Normalbetrieb, KEIN Restore) -->
   <line x1="200" y1="585" x2="990" y2="585" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow)"/>
-  <text x="595" y="578" fill="#a78bfa" font-size="8" text-anchor="middle" font-family="'JetBrains Mono', monospace">laufende async Replikation (Patroni / RBD-Mirror) — Normalbetrieb</text>
+  <text x="595" y="578" fill="#a78bfa" font-size="8" text-anchor="middle" font-family="'JetBrains Mono', monospace">laufende async Replikation (Patroni / CloudNativePG) — Normalbetrieb</text>
 
   <!-- ============ STANDORT B ============ -->
   <rect x="840" y="95" width="320" height="430" rx="12" fill="#0f172a"/>
@@ -77,7 +77,7 @@
   <text x="880" y="242" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">Objekte + PVs wiederherstellen</text>
   <text x="880" y="258" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">DB aus Backup-Modus zurückholen</text>
   <text x="880" y="274" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">oder Operator: Cluster neu aufbauen</text>
-  <text x="880" y="294" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">Ceph-Cluster B als Speicher</text>
+  <text x="880" y="294" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">Alletra Site B als Speicher</text>
 
   <!-- Restore-Pfeil -->
   <line x1="1140" y1="610" x2="1000" y2="360" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
@@ -116,8 +116,8 @@
   <text x="640" y="778" fill="#ffffff" font-size="10" font-weight="600" font-family="'JetBrains Mono', monospace">Schritte</text>
   <text x="640" y="796" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">1  Backup-Trigger (Velero-Cron)</text>
   <text x="640" y="812" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">2  DB-Konsistenz: Dump via Sidecar/Hook</text>
-  <text x="640" y="828" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">3  CSI-Snapshot (RBD) · 4 Upload nach MinIO</text>
+  <text x="640" y="828" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">3  CSI-Snapshot (Array) · 4 Upload nach MinIO</text>
   <text x="640" y="844" fill="#94a3b8" font-size="9" font-family="'JetBrains Mono', monospace">5  Operator-Backup (optional) · 6 DR-Restore</text>
-  <text x="640" y="862" fill="#a78bfa" font-size="9" font-family="'JetBrains Mono', monospace">7  laufende async Replikation (Patroni / RBD-Mirror)</text>
+  <text x="640" y="862" fill="#a78bfa" font-size="9" font-family="'JetBrains Mono', monospace">7  laufende async Replikation (Patroni / CloudNativePG)</text>
   <text x="640" y="878" fill="#94a3b8" font-size="8" font-family="'JetBrains Mono', monospace">    = Normalbetrieb · 6 Restore nur bei Failover/Test</text>
 </svg>

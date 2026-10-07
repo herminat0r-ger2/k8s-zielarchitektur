@@ -9,11 +9,11 @@ Dieses Dokument gehört zur Hauptarchitektur (nicht zum Backup-Konzept) — Back
 
 ## 1. Anforderung (verbindlich)
 
-Standort B übernimmt **immer sofort** — als Hot Standby oder Active/Active. Ein Restore aus dem Backup ist kein Übernahme-Pfad (nur Sicherheitsnetz gegen Datenverlust/Korruption). Konsequenz: **Jede** Datenbank braucht Replikation nach B (Patroni/DB-eigene Replikation), auch "nur eine Instanz" ohne HA im Normalbetrieb. Unterschied nur Automatisierungsgrad:
+Standort B übernimmt **immer sofort** — als Hot Standby oder Active/Active. Ein Restore aus dem Backup ist kein Übernahme-Pfad (nur Sicherheitsnetz gegen Datenverlust/Korruption). Konsequenz: **Jede** Datenbank braucht Replikation nach B (**CloudNativePG** für DBs in Kubernetes, Patroni/DB-eigene Replikation für DB-VMs), auch "nur eine Instanz" ohne HA im Normalbetrieb. Unterschied nur Automatisierungsgrad:
 
 | Übernahme | Mechanismus | RTO |
 |---|---|---|
-| automatisch (Hot Standby) | Patroni / DB-Operator / Witness-gesteuerter VM-Start | Sekunden–Minuten |
+| automatisch (Hot Standby) | CloudNativePG / Patroni / Witness-gesteuerter VM-Start | Sekunden–Minuten |
 | manuell per Runbook | Replica läuft in B, Promotion per Runbook | Minuten (RTO = Mensch) |
 
 ## 2. Heutiges Verhalten (vSphere-Stretched-Cluster) als Referenz
@@ -25,13 +25,13 @@ vSphere HA startet bei Ausfall von Standort A die VMs auf Hosts in B **neu** (Re
 | Ebene | Mechanismus | Konfiguration |
 |---|---|---|
 | Node-Failover (Host in A stirbt) | Proxmox HA (`ha-manager`) | Einstellung, kein Skript |
-| Standort-Failover (ganzes DC A down) | RBD-Mirror (Daten in B) + Start der VMs in B | Failover-Skript/Runbook + Down-Detection nötig |
+| Standort-Failover (ganzes DC A down) | Alletra-Metro (Daten liegen synchron in B) + Start der VMs in B | Failover-Skript/Runbook + Down-Detection nötig |
 
 ## 4. Split-Brain — das Kernproblem
 
 Ohne Quorum weiß B nicht, ob A down ist oder nur der Link A–B. Falscher Automatismus: B startet VMs, obwohl A nach außen weiter funktioniert → beide Standorte schreiben → beim Wiederverbinden überschreibt einer den anderen (Datenverlust).
 
-**Lokaler Ceph vermeidet nur das Storage-Split-Brain** (kein gemeinsamer Speicherzustand über die DCs; fail-safe: ohne Quorum schreibt nur einer oder keiner). Die **Failover-Entscheidung selbst** (DB-Promotion, VM-Start in B) braucht trotzdem eine unabhängige 3. Instanz — Witness = Quorum = Tie-Breaker, nur auf anderer Ebene.
+**Die Storage-Ebene beantwortet das Array, nicht der Cluster.** Das Alletra-Metro-Paar hält den gemeinsamen Speicherzustand; die **array-eigene Quorum-Witness** entscheidet, welches System präsentiert (fail-safe: ohne Bestätigung schreibt nur einer oder keiner). Die **Failover-Entscheidung selbst** (DB-Promotion, VM-Start in B) braucht trotzdem eine unabhängige 3. Instanz — Witness = Quorum = Tie-Breaker, nur auf anderer Ebene.
 
 ## 5. Der Witness (3. Instanz) — was er prüft
 
@@ -42,7 +42,7 @@ Ohne Quorum weiß B nicht, ob A down ist oder nur der Link A–B. Falscher Autom
 | Ebene | Check |
 |---|---|
 | Management | Proxmox-Cluster-API erreichbar (HTTPS gegen 2–3 Nodes, nicht eine IP) |
-| Storage | Ceph-Cluster-A Health (Monitore/Manager via API) |
+| Storage | Alletra-Metro-Paar erreichbar + Quorum-Witness (Array-API) |
 | Netzwerk | Gateway/Router/Leaf-Spine in A (ICMP + API) |
 | Hardware (optional) | iLO/BMC mehrerer Nodes (zu eng als einziges Kriterium) |
 
@@ -57,9 +57,9 @@ Ohne Quorum weiß B nicht, ob A down ist oder nur der Link A–B. Falscher Autom
 
 ## 6. Drei Regeln für den Failover
 
-1. **Single-Primary:** Nur ein Standort schreibt. B ist Replica (Patroni/DB-eigene Replikation) — "beide schreiben" entsteht gar nicht erst.
+1. **Single-Primary:** Nur ein Standort schreibt. B ist Replica (CloudNativePG bzw. Patroni/DB-eigene Replikation) — "beide schreiben" entsteht gar nicht erst.
 2. **Quorum/Witness:** Automatischer Failover nur mit Bestätigung durch die 3. Instanz. A lebt + Link down → kein Failover. A wirklich down → B failovert.
-3. **Fencing bei Rückkehr:** A kommt nach Failover als Replica zurück (DBs: Patroni/DCS macht das automatisch). Legacy-VMs: Spiegel-Richtung umkehren (B → A), sonst überschreibt A den neueren Stand.
+3. **Fencing bei Rückkehr:** A kommt nach Failover als Replica zurück (DBs: CloudNativePG/Patroni/DCS machen das automatisch). Legacy-VMs: Spiegel-Richtung umkehren (B → A), sonst überschreibt A den neueren Stand.
 
 ## 7. Entscheidung (verworfen — galt für getrennte Cluster)
 
@@ -93,7 +93,7 @@ Diese Prämisse setzt **hyperkonvergentes Ceph als Storage der Proxmox-VM-Disks*
 
 Damit fällt das stärkste Gegenargument weg.
 
-> **Nicht berührt:** Die Anforderung aus §1 bleibt in vollem Umfang bestehen. Die Array-Metro-Replikation ersetzt **nicht** die Replikation auf Anwendungsebene — Patroni/DB-eigene Replikation und RBD-Mirror für Kubernetes-PVs bleiben **Pflicht**. Die Alletra macht das Storage hochverfügbar; sie macht eine Datenbank nicht konsistent über zwei Standorte.
+> **Nicht berührt:** Die Anforderung aus §1 bleibt in vollem Umfang bestehen. Die Array-Metro-Replikation ersetzt **nicht** die Replikation auf Anwendungsebene — **CloudNativePG** (Postgres in Kubernetes) bzw. Patroni/DB-eigene Replikation (DB-VMs) bleiben **Pflicht**. Die Alletra macht das Storage hochverfügbar; sie macht eine Datenbank nicht konsistent über zwei Standorte.
 
 ### 8.2 Das Node-Skala-Argument ist ein Artefakt des alten Timeouts
 

@@ -16,7 +16,7 @@ Es gibt **keine** Lösung, die *null* Eingriff braucht: App-konsistente Backups 
 | K8s-Objekte + PVs | Velero → MinIO (S3) | Deployments, Secrets, ConfigMaps, CRDs, PVC-Inhalte (via CSI-Snapshot/Restic) | gezielter Namespace/App in beliebigem Cluster |
 | DB-Konsistenz | pre-freeze/post-thaw-Skripte (VMs) + DB-Operatoren/Stash (K8s) | konsistenter DB-Zustand (Lock/Checkpoint/Dump) | DB mit sauberem Abbild, ohne Recovery-Überraschungen |
 
-**Warum drei Ebenen?** PBS sichert die VM-Disk. Die Nutzdaten von K8s-Workloads (PVCs via ceph-csi) liegen aber in eigenen RBD-Images im Ceph-Pool — **nicht** in der Node-VM-Disk. Ein PBS-Restore stellt Nodes wieder her, aber weder PVCs noch den konsistenten DB-Zustand. Velero deckt die K8s-Ebene ab, die Skripte/Operatoren die DB-Konsistenz.
+**Warum drei Ebenen?** PBS sichert die VM-Disk. Die Nutzdaten von K8s-Workloads (PVCs via HPE CSI Driver) liegen aber in eigenen LUNs auf dem Alletra-Metro-Paar — **nicht** in der Node-VM-Disk. Ein PBS-Restore stellt Nodes wieder her, aber weder PVCs noch den konsistenten DB-Zustand. Velero deckt die K8s-Ebene ab, die Skripte/Operatoren die DB-Konsistenz.
 
 ## 2. VM-Ebene: PBS + Uyuni + PVE-Hook
 

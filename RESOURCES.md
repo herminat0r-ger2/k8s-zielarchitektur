@@ -6,6 +6,12 @@
 
 ---
 
+> **⚠️ Status 2026-10-07 — in Teilen überholt.** Die Topologie-Entscheidung ist revidiert: Es wird ein **gestreckter Proxmox-Cluster** auf dem **HPE Alletra MP B10000 Metro-Paar** gebaut, **ohne Ceph** und mit **OpenTofu** statt Ansible.
+> Damit sind die Ceph-Stretch-Analyse (Sektion 2) und die Empfehlung "kein Cluster über 2 DCs" (Sektion 1) **historischer Stand** — die Begründung für die Revision steht in [failover.md](failover.md) §8/§9.
+> Die Sektionen 3–6 (etcd, ClusterMesh, Distribution, KRITIS) bleiben **uneingeschränkt gültig**.
+
+---
+
 ## 1. Proxmox VE — Cluster & Quorum
 
 ### Kernaussagen
@@ -27,6 +33,7 @@
 - **Kritisch: Jeder Proxmox-Cluster muss ≥3 Nodes haben** und Corosync über **zwei getrennte physische Netzwerke** (VLAN-übergreifend, nicht nur ein Bond)
 - QDevice nicht nötig bei 16–24 Nodes, aber bei Wartungsfenstern (Node-Drain) Quorum beachten — mit 16–24 Nodes unkritisch
 - **Kein Proxmox-Cluster über 2 DCs strecken!** Corosync ist latenzempfindlich, pmxcfs synchron — das ist der klassische Proxmox-Fehler. Pro DC eigene Cluster
+  - ⚠️ **Überholt (2026-10-07):** Entschieden ist der **gestreckte Cluster** auf dem Alletra-Metro-Paar. Die Latenz-Warnung bleibt gültig und wird als **Auflage** behandelt (Corosync-Timeouts tunen, QDevice am 3. Standort) — siehe [failover.md](failover.md) §8/§9.
 
 ---
 
@@ -58,6 +65,7 @@
 ### ✅ Konsequenz für uns
 - **Unsere 4×100 Gb/s Interconnect ist die Ausnahme-Situation**, die Stretch überhaupt erlaubt — aber **Latenz messen!** Wenn >2–3 ms RTT zwischen den DCs: Stretch kritisch prüfen
 - **Empfehlung bleibt: Ceph pro DC (getrennte Cluster) + Replikation auf Applikationsebene** (Patroni, RBD-Mirroring). Stretch nur für die wirklich Metro-kritischen VMs (FCI/RAC) — genau das haben wir mit SAN/Alletra Metro vorgesehen
+- ⚠️ **Überholt (2026-10-07):** Ceph entfällt im Zielbild. Die Alletra wird **Metro-Paar** (lokale Präsentation + synchrone Spiegelung) für den Proxmox-Cluster UND für Kubernetes-Cluster; App-Replikation über **CloudNativePG** (K8s) bzw. Patroni (DB-VMs).
 - Falls doch Stretch für K8s-Rook: size=4 + Tie-Breaker-VM, **niemals OLTP-DB-PV auf Stretch-Pool**
 - Netzwerk: OSD-Traffic sauber vom Corosync- und VM-Traffic trennen (Ceph-Empfehlung 10 GbE min., wir haben 100 GbE)
 
