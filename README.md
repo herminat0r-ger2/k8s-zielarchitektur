@@ -13,6 +13,7 @@ Interaktives HTML-Diagramm der Zielarchitektur für eine KRITIS-Umgebung auf HPE
 
 - **Zwei Standorte (Aktiv/Passiv & Aktiv/Aktiv)** — umschaltbar per Toggle im Diagramm
 - **[failover.md](failover.md)** — Standort-Failover & Split-Brain: Anforderung "B übernimmt sofort", Witness/Down-Detection, drei Regeln
+- **[storage.md](storage.md)** — Proxmox VE Storage-Lösungen (File- & Block-Level): Bewertungsmatrix für das Enterprise-Stretched-Cluster (HPE Alletra + PBS), Empfehlung Block-Storage über NVMe-oF/iSCSI + LVM, Linux-VM-Resilienz bei Netzwerkfehlern
 - **Layer-Modell**: Proxmox VE (VM-Plattform) · RKE2/Talos Kubernetes · Cilium Overlay · Ceph Storage · DR via Velero/Patroni
 - **Umgebungen**: Produktiv / Test / Quality als getrennte Cluster
 - **Offene Entscheidungen** direkt im Diagramm dokumentiert
