@@ -26,7 +26,7 @@ drei Proxmox-Cluster — je einer lokal in A und B (standorteigener Storage, kei
 - [ ] **Transport je Host festlegen.** Auf der B10000 verfügbar: FC, NVMe-oF/FC, NVMe-oF/TCP, iSCSI. **NVMe/RDMA (RoCE) gibt es nicht.**
 - [ ] ⚠️ **Pro Host genau ein NVMe-oF-Transport:** NVMe/TCP und NVMe/FC können **nicht** auf demselben Host koexistieren (auf dem System/der Array schon).
 - [ ] iSCSI **kann** auf derselben Array neben NVMe/TCP betrieben werden — pro Host aber ebenfalls nicht mischen.
-- [ ] **Port-Budget prüfen:** FC/NVMe/FC bis 12 Ports/Node, Ethernet (iSCSI **oder** NVMe/TCP) nur **0–2 Ports/Node** (modellabhängig). Bei vielen Hosts ist die FC-Seite großzügiger.
+- [ ] **Port-Budget prüfen:** FC/NVMe/FC bis **12 Ports/Node**; auf der Ethernet-Seite Ethernet je Adapter **4 Ports** (10/25GbE-4-Port-HBA: ab Werk 2× iSCSI + 2× NVMe/TCP) bzw. **2 Ports** (100GbE-2-Port-OCP: ab Werk 2× iSCSI); ab OS **10.6** bis zu **10 Frontend-Ethernet-Ports** einzeln als iSCSI **oder** NVMe/TCP. Bei vielen Hosts ist die FC-Seite großzügiger — und die Port-Personas trennen die LUN-Klassen portscharf.
 - [ ] **LUN-Klassen-Plan** aufschreiben: welche VM/Cluster-Gruppe nutzt lokal-only, welche Metro? Eigene **CPG je Klasse**.
 - [ ] **Kapazitätsplan** inkl. Overcommit-Faktor: LUN-Größen (logisch) vs. real verfügbare CPG-Kapazität, plus Reserve für Snapshots.
 - [ ] **Netzplan:** Storage-Netz getrennt vom Corosync-Netz (⚠️ *„Storage communication should never be on the same network as corosync"*), MTU-Konzept (Jumbo 9000 oder 1500 — **end-to-end konsistent**), VLANs, Adressen je Array-Node.

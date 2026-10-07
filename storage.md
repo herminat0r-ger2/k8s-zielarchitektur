@@ -131,9 +131,9 @@ Drei Punkte, die dabei überraschen:
 | MTU-Thema | keins (FC rahmt selbst) | relevant — Array kann 1280–9000 Byte | relevant (PFC) |
 | Multipath | nativ im Kernel | nativ im Kernel | nativ im Kernel |
 | Reifegrad | hoch (SAN-Welt, Zoning-/HBA-Tools) | jünger, aber produktionsreif | hoch, aber sehr tuning-intensiv |
-| **Auf der B10000?** | **ja** — 32/64 Gb, bis **12 Ports/Node** | **ja** — 10/25 GbE und 100 GbE, **0–2 Ports/Node** | **nein** |
+| **Auf der B10000?** | **ja** — 32/64 Gb, bis **12 Ports/Node** | **ja** — Ethernet je Adapter **4 Ports** (10/25GbE-4-Port-HBA: ab Werk 2× iSCSI + 2× NVMe/TCP) bzw. **2 Ports** (100GbE-2-Port-OCP: ab Werk 2× iSCSI); ab OS **10.6** bis zu **10 Frontend-Ethernet-Ports** einzeln als iSCSI **oder** NVMe/TCP | **nein** |
 
-**Warum die Port-Zahlen zählen:** Die Alletra bietet FC bzw. NVMe/FC bis zu **12 Ports pro Node**, Ethernet (iSCSI oder NVMe/TCP) dagegen nur **0–2 Ports pro Node** (10/25 GbE bzw. 100 GbE). Für Dual-Fabric plus Pfadredundanz über viele Hosts ist die FC-Seite der Array also deutlich großzügiger; auf der Ethernet-Seite müssen die Pfade eingeteilt werden. (Zahlen sind modellabhängig — im QuickSpecs nachsehen.)
+**Warum die Port-Zahlen zählen:** FC bzw. NVMe/FC stellt die Array mit bis zu **12 Ports pro Node** bereit; auf der Ethernet-Seite gilt: Ethernet je Adapter **4 Ports** (10/25GbE-4-Port-HBA: ab Werk 2× iSCSI + 2× NVMe/TCP) bzw. **2 Ports** (100GbE-2-Port-OCP: ab Werk 2× iSCSI); ab OS **10.6** bis zu **10 Frontend-Ethernet-Ports** einzeln als iSCSI **oder** NVMe/TCP. Für Dual-Fabric plus Pfadredundanz über viele Hosts ist die FC-Seite der Array also deutlich großzügiger; auf der Ethernet-Seite müssen die Pfade eingeteilt werden. (Adapter-Bestückung im QuickSpecs prüfen.)
 
 **Entscheidungsregel:**
 
@@ -160,7 +160,7 @@ Drei Punkte, die dabei überraschen:
 
 #### 2.4.3 Bewertung im Kontext dieses Setups
 - **NVMe/FC** ist die technisch stärkste Option: HBA-Offload, bis zu 12 Ports/Node auf der Array, hohe Reife. Preis: ein FC-Fabric muss da sein.
-- **NVMe/TCP** hat die niedrigste Einstiegshürde (vorhandenes Ethernet), kostet aber Host-CPU, ist auf der Array auf 0–2 Ethernet-Ports/Node begrenzt und trifft mit dem NQN-Fallstrick ([4.1.2](#412-der-metro-paar-fallstrick)) genau die geplante Doppelnutzung der Arrays.
+- **NVMe/TCP** hat die niedrigste Einstiegshürde (vorhandenes Ethernet), kostet aber Host-CPU, ist auf der Array an die Ethernet-Ports der Adapter gebunden (**2 bzw. 4 Ports**, ab 10.6 bis 10 einzeln konfigurierbar) und trifft mit dem NQN-Fallstrick ([4.1.2](#412-der-metro-paar-fallstrick)) genau die geplante Doppelnutzung der Arrays.
 - In der Bewertungstabelle unten sind beide deshalb **getrennt** geführt.
 
 > **Einbindung in Proxmox VE** und die **Pflicht-Vorprüfung** (Metro-Paar-Fallstrick) stehen in der Detailanalyse der empfohlenen Option: [§4.1](#41-nvme-of--fc--iscsi--lvm-auf-hpe-alletra-b10000-klare-empfehlung) — dort auch die Diagnose-Befehle.
@@ -179,7 +179,7 @@ Drei Punkte, die dabei überraschen:
 | **NVMe-oF/FC + LVM** | 10 | 4–7 ¹ | **10** | 6 | 10 | **10** (natives Multipath) | 8 | **9.7** | **Beste Performance** (HBA-Offload, bis 12 Ports/Node) |
 | **iSCSI + LVM (Thick)** | 10 (Alletra nativ) | 4–7 ¹ | 9 | 6 | 10 | **9–10** (Multipath) | 8 | **9.5** | **Primär empfohlen** — robusteste Variante bei zwei LUN-Klassen ⁴ |
 | **FC + LVM** | 10 | 4–7 ¹ | 9.5 | 6 | 10 | **9–10** | 8 | **9.5** | Sehr gut |
-| **NVMe-oF/TCP + LVM** | 10 | 4–7 ¹ | 9.5 | **5** | 10 | **9.5** (natives Multipath) | 8 | **9.4** | Ohne FC-Fabric — Ethernet, mehr Host-CPU, 0–2 Ports/Node ³ |
+| **NVMe-oF/TCP + LVM** | 10 | 4–7 ¹ | 9.5 | **5** | 10 | **9.5** (natives Multipath) | 8 | **9.4** | Ohne FC-Fabric — Ethernet, mehr Host-CPU, wenige Array-Ethernet-Ports ³ |
 | **NFS (Alletra File)** | 9 | 6–8 ² | 7–8 | **3** | 9 | 6–7 (weniger robust bei Path-Fail) | 9 | 7.5 | Gut für ISO/Templates |
 | **ZFS over iSCSI** | 9 | **10** | 8 | 8 | 9 | 7–8 | 8 | 7.5 | Möglich, aber komplex |
 | **Ceph RBD** | 8 (eigene Stretch-Mode) | **10** | 8–9 | 8–9 | 10 | 8 (eigene Replikation) | 9 | 7–8 | Nur wenn Hyperconverged |
@@ -194,8 +194,8 @@ Drei Punkte, die dabei überraschen:
 
 - ¹ Mit neueren Proxmox-Versionen (Volume Chains / qcow2-on-LVM) besser; ansonsten Array-Snapshots (Alletra) nutzen.
 - ² qcow2 oder Array-seitige Snapshots.
-- ³ Nur 0–2 Ethernet-Host-Ports pro Node (10/25 GbE bzw. 100 GbE), mehr Host-CPU-Last als FC **und** der NQN-Fallstrick bei zwei LUN-Klassen auf denselben Arrays — siehe [4.1.2](#412-der-metro-paar-fallstrick). **NVMe/RDMA (RoCE) bietet die B10000 nicht.**
-- ⁴ **Warum iSCSI (9,5) knapp vor NVMe/TCP (9,4) steht**, obwohl NVMe/TCP die bessere Latenz und nativen Multipath hat: Auf der B10000 teilen sich beide **dieselben 0–2 Ethernet-Ports pro Node** (kein Port-Vorteil), und der **NQN/NDSID-Fallstrick tritt nur bei NVMe auf** — bei zwei LUN-Klassen auf denselben Arrays ist iSCSI das risikoärmere Protokoll. Wer den Fallstrick sauber löst (getrennte Port-Sets/NQNs, Test nach [4.1.2](#412-der-metro-paar-fallstrick)), fährt mit NVMe/TCP technisch besser. Der Abstand ist bewusst klein — begründete Abwägung, keine Messung.
+- ³ Ethernet-Seite der Array: Ethernet je Adapter **4 Ports** (10/25GbE-4-Port-HBA: ab Werk 2× iSCSI + 2× NVMe/TCP) bzw. **2 Ports** (100GbE-2-Port-OCP: ab Werk 2× iSCSI); ab OS **10.6** bis zu **10 Frontend-Ethernet-Ports** einzeln als iSCSI **oder** NVMe/TCP — also deutlich weniger als die bis zu 12 FC-Ports/Node. Dazu mehr Host-CPU-Last als FC **und** der NQN-Fallstrick bei zwei LUN-Klassen auf denselben Arrays — siehe [4.1.2](#412-der-metro-paar-fallstrick). **NVMe/RDMA (RoCE) bietet die B10000 nicht.**
+- ⁴ **Warum iSCSI (9,5) knapp vor NVMe/TCP (9,4) steht**, obwohl NVMe/TCP die bessere Latenz und nativen Multipath hat: Auf der B10000 teilen sich beide **dieselben Ethernet-Ports der Array** (kein Port-Vorteil zueinander), und der **NQN/NDSID-Fallstrick tritt nur bei NVMe auf** — bei zwei LUN-Klassen auf denselben Arrays ist iSCSI das risikoärmere Protokoll. Wer den Fallstrick sauber löst (getrennte Port-Sets/NQNs, Test nach [4.1.2](#412-der-metro-paar-fallstrick)), fährt mit NVMe/TCP technisch besser. Der Abstand ist bewusst klein — begründete Abwägung, keine Messung.
 
 ---
 
@@ -206,7 +206,7 @@ Drei Punkte, die dabei überraschen:
 - Alletra als Metro-Paar (Peer Persistence) präsentiert denselben LUN an beiden Standorten mit transparentem Failover.
 - **Transport bewusst wählen** — auf der B10000 stehen **NVMe/FC** und **NVMe/TCP**, **kein** NVMe/RDMA ([2.4](#24-nvme-of-im-detail--die-transporte)):
   - **NVMe/FC** = technisch stärkste Variante (HBA-Offload, bis 12 Ports/Node, etabliertes Zoning) — braucht ein FC-Fabric.
-  - **NVMe/TCP** = nutzt die Ethernet-Infrastruktur, dafür Host-CPU-Last und nur 0–2 Ethernet-Ports/Node; bei zwei LUN-Klassen auf denselben Arrays ist der NQN-Fallstrick (4.1.2) Pflicht-Prüfpunkt.
+  - **NVMe/TCP** = nutzt die Ethernet-Infrastruktur, dafür Host-CPU-Last und geteilte Array-Ethernet-Ports (2 bzw. 4 pro Adapter); bei zwei LUN-Klassen auf denselben Arrays ist der NQN-Fallstrick (4.1.2) Pflicht-Prüfpunkt.
   - **iSCSI/FC ohne NVMe** = gleichwertiger Fallback, wenn Kompatibilität wichtiger ist als Latenz.
 - Proxmox: **NVMe-oF** per CLI (`nvme-cli`), **iSCSI** über den Storage-Typ `iscsi` ([4.1.1](#411-einbindung-in-proxmox-ve)) → LVM-Volume-Group auf dem Multipath-Device → als **shared** markieren.
 
@@ -368,7 +368,7 @@ Kurz erklärt, was die im Dokument verwendeten Storage- und Cluster-Begriffe tec
 
 **Was es ist.** NVMe ist das Kommando-Protokoll für SSDs — nicht mehr SCSI, sondern für massiv parallele, latenzarme Zugriffe über PCIe gebaut (viele tiefe Queues statt einer). **NVMe-oF** nimmt genau dieses Protokoll und legt es über ein *Netzwerk* statt über PCIe. Für den Host sieht die entfernte SSD aus wie eine lokale NVMe-Namespace (`/dev/nvmeXnY`).
 
-**Transporte.** Das Suffix benennt den Transport: **NVMe/FC** (FC-Fabric, HBA-Offload, bis 12 Ports/Node), **NVMe/TCP** (Standard-Ethernet, mehr Host-CPU, 0–2 Ethernet-Ports/Node), **NVMe/RDMA** (RoCEv2/InfiniBand, verlustfreies Ethernet nötig — von der B10000 **nicht** angeboten). Vollständiger Vergleich, die HPE-Randbedingungen und der Metro-Paar-Fallstrick: [2.4](#24-nvme-of-im-detail--die-transporte).
+**Transporte.** Das Suffix benennt den Transport: **NVMe/FC** (FC-Fabric, HBA-Offload, bis 12 Ports/Node), **NVMe/TCP** (Standard-Ethernet, mehr Host-CPU, teilt die Array-Ethernet-Ports mit iSCSI), **NVMe/RDMA** (RoCEv2/InfiniBand, verlustfreies Ethernet nötig — von der B10000 **nicht** angeboten). Vollständiger Vergleich, die HPE-Randbedingungen und der Metro-Paar-Fallstrick: [2.4](#24-nvme-of-im-detail--die-transporte).
 
 **Warum es im Dokument vorne steht.** Gegenüber iSCSI deutlich weniger Latenz und CPU-Overhead (kein SCSI-über-TCP-Stack) — und Multipath ist **im Kernel eingebaut**: wo iSCSI `dm-multipath` braucht, macht NVMe es selbst (`nvme_core.multipath=Y`; `nvme list-subsys` zeigt die Pfade, `nvme list -v` die Namespaces). Im Proxmox-Setup legt man die LVM-Volume-Group wieder auf das Multipath-Device und markiert den Storage als *shared*.
 
