@@ -8,6 +8,7 @@
 
 1. [Rahmenbedingungen des Setups](#1-rahmenbedingungen-des-setups)
 2. [Alle relevanten Proxmox Storage-Typen](#2-alle-relevanten-proxmox-storage-typen) — inkl. [2.4 NVMe-oF im Detail](#24-nvme-of-im-detail--die-transporte)
+4. [Detaillierte Analyse](#4-detaillierte-analyse-der-relevanten-optionen) — inkl. [4.1.1 Einbindung in Proxmox](#411-einbindung-in-proxmox-ve) und [4.1.2 Metro-Paar-Fallstrick](#412-der-metro-paar-fallstrick)
 3. [Bewertungstabelle Enterprise-Stretched-Cluster](#3-bewertungstabelle-enterprise-stretched-cluster)
 4. [Detaillierte Analyse der relevanten Optionen](#4-detaillierte-analyse-der-relevanten-optionen)
 5. [Empfohlenes Architektur-Setup](#5-empfohlenes-architektur-setup)
@@ -98,50 +99,12 @@
 | Ethernet-Pause und PFC (DCBX) mit NVMe/TCP unterstützt | Lossless-Option vorhanden |
 | Ab ArcusOS 10.6: alle 10 Frontend-Ethernet-Ports einzeln als iSCSI **oder** NVMe/TCP konfigurierbar | flexiblere Port-Planung |
 
-#### 2.4.3 Einbindung in Proxmox VE
-
-Proxmox hat **keinen NVMe-oF-Storage-Typ in der GUI** — die Verbindung wird per CLI am Host aufgebaut, danach wird das Device als **LVM (shared)** eingetragen:
-
-```bash
-apt update && apt -y install nvme-cli
-modprobe nvme_tcp
-echo "nvme_tcp" > /etc/modules-load.d/nvme_tcp.conf     # RDMA: Modul nvme_rdma
-nvme discover -t tcp -a <array-ip> -s 4420
-nvme connect  -t tcp -n <nqn> -a <array-ip> -s 4420
-nvme list                       # -> /dev/nvmeXnY
-vgcreate <vg> /dev/nvmeXnY      # von EINEM Host
-# dann in der PVE-GUI: LVM-Storage, "Existing volume groups", Nodes wählen, "Shared" markieren
-```
-
-**Persistenz über Reboot:** Eintrag in `/etc/nvme/discovery.conf` + `systemctl enable nvmf-autoconnect.service` (Alternative: `nvme-stas` als Connection-Manager). Bei **NVMe/FC** genügt HBA-Zoning — kein `nvme connect` nötig.
-
-**Prüfen — die vier Befehle, die man im Fehlerfall braucht:**
-
-```bash
-nvme list              # Namespaces
-nvme list-subsys       # Pfade je Subsystem (Multipath-Status)
-nvme list -v           # NQN, NDSID, Controller, Pfad-Zustand
-dmesg | grep -i nvme   # z. B. "IDs don't match for shared namespace"
-```
-
-#### 2.4.4 Der Metro-Paar-Fallstrick (dokumentierter Vorfall mit genau dieser Architektur)
-
-⚠️ 
-Ein Proxmox-Forum-Fall (PVE 9.2, **zwei aktiv-aktiv gespiegelte HPE-Alletra-Arrays**, NVMe/TCP mit nativem Kernel-Multipath) beschreibt einen Fehler, der **exakt** zu einer Array mit zwei LUN-Klassen passt — wie sie hier geplant ist (*lokal-only* **und** *Metro* auf denselben Systemen):
-
-- **Symptom:** Nach einem Reboot waren einige shared Volumes auf **einem** Host nicht mehr sichtbar. Im `dmesg` stand *„IDs don't match for shared namespace"*, obwohl alle Subsysteme verbunden waren. `nvme disconnect all`, `nvme discover` und `nvme ns-rescan` halfen nicht.
-- **Ursache:** Das zum **Master** promovierte Array exponiert bei gespiegelten Volumes alle Pfade mit **seinem** NQN — genau damit Clients dasselbe Volume sehen, egal über welches Array sie zugreifen. Es exponierte dabei aber **auch die nicht gespiegelten Volumes** des Partner-Arrays, und die kamen von dort mit **deren** NQN → **identische NDSIDs, unterschiedliche NQNs** → der Kernel lehnt das Namespace ab.
-- **Konsequenz für die Planung:** Die beiden LUN-Klassen dürfen sich auf **Namespace-/Subsystem-Ebene** nicht in die Quere kommen:
-  - **Getrennte Ports/Port-Sets und Host-Gruppen** je Klasse — nicht alles über dieselben Ziel-Ports präsentieren.
-  - **Getrennte Host-NQNs** für die lokale und die Metro-Anbindung, damit der Host nicht zwei Subsysteme mit gleicher NDSID sieht.
-  - **Alternativ die Klassen trennen:** lokal-only über iSCSI/FC, Metro über NVMe-oF (oder umgekehrt) — die Kombination NVMe/TCP + iSCSI **auf der Array** ist laut HPE erlaubt, auf demselben **Host** nicht.
-  - Vor dem Produktivbetrieb **beide Klassen gleichzeitig** an einem Testhost hochziehen und `nvme list -v` prüfen, *bevor* die VMs umziehen.
-
-#### 2.4.5 Bewertung im Kontext dieses Setups
-
+#### 2.4.3 Bewertung im Kontext dieses Setups
 - **NVMe/FC** ist die technisch stärkste Option: HBA-Offload, bis zu 12 Ports/Node auf der Array, hohe Reife. Preis: ein FC-Fabric muss da sein.
-- **NVMe/TCP** hat die niedrigste Einstiegshürde (vorhandenes Ethernet), kostet aber Host-CPU, ist auf der Array auf 0–2 Ethernet-Ports/Node begrenzt und trifft mit dem NQN-Fallstrick (2.4.4) genau die geplante Doppelnutzung der Arrays.
+- **NVMe/TCP** hat die niedrigste Einstiegshürde (vorhandenes Ethernet), kostet aber Host-CPU, ist auf der Array auf 0–2 Ethernet-Ports/Node begrenzt und trifft mit dem NQN-Fallstrick ([4.1.2](#412-der-metro-paar-fallstrick)) genau die geplante Doppelnutzung der Arrays.
 - In der Bewertungstabelle unten sind beide deshalb **getrennt** geführt.
+
+> **Einbindung in Proxmox VE** und die **Pflicht-Vorprüfung** (Metro-Paar-Fallstrick) stehen in der Detailanalyse der empfohlenen Option: [§4.1](#41-nvme-of--fc--iscsi--lvm-auf-hpe-alletra-b10000-klare-empfehlung) — dort auch die Diagnose-Befehle.
 
 ---
 
@@ -170,7 +133,7 @@ Ein Proxmox-Forum-Fall (PVE 9.2, **zwei aktiv-aktiv gespiegelte HPE-Alletra-Arra
 
 - ¹ Mit neueren Proxmox-Versionen (Volume Chains / qcow2-on-LVM) besser; ansonsten Array-Snapshots (Alletra) nutzen.
 - ² qcow2 oder Array-seitige Snapshots.
-- ³ Nur 0–2 Ethernet-Host-Ports pro Node (10/25 GbE bzw. 100 GbE), mehr Host-CPU-Last als FC **und** der NQN-Fallstrick bei zwei LUN-Klassen auf denselben Arrays — siehe [2.4](#24-nvme-of-im-detail--die-transporte). **NVMe/RDMA (RoCE) bietet die B10000 nicht.**
+- ³ Nur 0–2 Ethernet-Host-Ports pro Node (10/25 GbE bzw. 100 GbE), mehr Host-CPU-Last als FC **und** der NQN-Fallstrick bei zwei LUN-Klassen auf denselben Arrays — siehe [4.1.2](#412-der-metro-paar-fallstrick). **NVMe/RDMA (RoCE) bietet die B10000 nicht.**
 
 ---
 
@@ -181,9 +144,50 @@ Ein Proxmox-Forum-Fall (PVE 9.2, **zwei aktiv-aktiv gespiegelte HPE-Alletra-Arra
 - Alletra als Metro-Paar (Peer Persistence) präsentiert denselben LUN an beiden Standorten mit transparentem Failover.
 - **Transport bewusst wählen** — auf der B10000 stehen **NVMe/FC** und **NVMe/TCP**, **kein** NVMe/RDMA ([2.4](#24-nvme-of-im-detail--die-transporte)):
   - **NVMe/FC** = technisch stärkste Variante (HBA-Offload, bis 12 Ports/Node, etabliertes Zoning) — braucht ein FC-Fabric.
-  - **NVMe/TCP** = nutzt die Ethernet-Infrastruktur, dafür Host-CPU-Last und nur 0–2 Ethernet-Ports/Node; bei zwei LUN-Klassen auf denselben Arrays ist der NQN-Fallstrick ([2.4.4](#244-der-metro-paar-fallstrick-dokumentierter-vorfall-mit-genau-dieser-architektur)) Pflicht-Prüfpunkt.
+  - **NVMe/TCP** = nutzt die Ethernet-Infrastruktur, dafür Host-CPU-Last und nur 0–2 Ethernet-Ports/Node; bei zwei LUN-Klassen auf denselben Arrays ist der NQN-Fallstrick (4.1.2) Pflicht-Prüfpunkt.
   - **iSCSI/FC ohne NVMe** = gleichwertiger Fallback, wenn Kompatibilität wichtiger ist als Latenz.
-- Proxmox: Anbindung per CLI (`nvme-cli`, `nvme discover`/`connect`, [2.4.3](#243-einbindung-in-proxmox-ve)) → LVM-Volume-Group auf dem Multipath-Device → als **shared** markieren.
+- Proxmox: Anbindung per CLI (`nvme-cli`, `nvme discover`/`connect`) → LVM-Volume-Group auf dem Multipath-Device → als **shared** markieren — Anleitung und Diagnose: [4.1.1](#411-einbindung-in-proxmox-ve).
+
+#### 4.1.1 Einbindung in Proxmox VE
+
+Die Verbindung wird **am Host** aufgebaut (kein Storage-Typ in der GUI), danach wird das Device als LVM eingetragen:
+
+Proxmox hat **keinen NVMe-oF-Storage-Typ in der GUI** — die Verbindung wird per CLI am Host aufgebaut, danach wird das Device als **LVM (shared)** eingetragen:
+
+```bash
+apt update && apt -y install nvme-cli
+modprobe nvme_tcp
+echo "nvme_tcp" > /etc/modules-load.d/nvme_tcp.conf     # RDMA: Modul nvme_rdma
+nvme discover -t tcp -a <array-ip> -s 4420
+nvme connect  -t tcp -n <nqn> -a <array-ip> -s 4420
+nvme list                       # -> /dev/nvmeXnY
+vgcreate <vg> /dev/nvmeXnY      # von EINEM Host
+# dann in der PVE-GUI: LVM-Storage, "Existing volume groups", Nodes wählen, "Shared" markieren
+```
+
+**Persistenz über Reboot:** Eintrag in `/etc/nvme/discovery.conf` + `systemctl enable nvmf-autoconnect.service` (Alternative: `nvme-stas` als Connection-Manager). Bei **NVMe/FC** genügt HBA-Zoning — kein `nvme connect` nötig.
+
+**Prüfen — die vier Befehle, die man im Fehlerfall braucht:**
+
+```bash
+nvme list              # Namespaces
+nvme list-subsys       # Pfade je Subsystem (Multipath-Status)
+nvme list -v           # NQN, NDSID, Controller, Pfad-Zustand
+dmesg | grep -i nvme   # z. B. "IDs don't match for shared namespace"
+```
+
+#### 4.1.2 Der Metro-Paar-Fallstrick
+
+> ⚠️ **Pflicht-Vorprüfung vor dem Produktivstart:** beide LUN-Klassen gleichzeitig an einem Testhost hochziehen und `nvme list -v` prüfen. Tauchen dort zwei Subsysteme mit gleicher NDSID auf, ist das vor dem VM-Umzug zu lösen.
+
+Ein Proxmox-Forum-Fall (PVE 9.2, **zwei aktiv-aktiv gespiegelte HPE-Alletra-Arrays**, NVMe/TCP mit nativem Kernel-Multipath) beschreibt einen Fehler, der **exakt** zu einer Array mit zwei LUN-Klassen passt — wie sie hier geplant ist (*lokal-only* **und** *Metro* auf denselben Systemen):
+
+- **Symptom:** Nach einem Reboot waren einige shared Volumes auf **einem** Host nicht mehr sichtbar. Im `dmesg` stand *„IDs don't match for shared namespace"*, obwohl alle Subsysteme verbunden waren. `nvme disconnect all`, `nvme discover` und `nvme ns-rescan` halfen nicht.
+- **Ursache:** Das zum **Master** promovierte Array exponiert bei gespiegelten Volumes alle Pfade mit **seinem** NQN — genau damit Clients dasselbe Volume sehen, egal über welches Array sie zugreifen. Es exponierte dabei aber **auch die nicht gespiegelten Volumes** des Partner-Arrays, und die kamen von dort mit **deren** NQN → **identische NDSIDs, unterschiedliche NQNs** → der Kernel lehnt das Namespace ab.
+- **Konsequenz für die Planung:** Die beiden LUN-Klassen dürfen sich auf **Namespace-/Subsystem-Ebene** nicht in die Quere kommen:
+  - **Getrennte Ports/Port-Sets und Host-Gruppen** je Klasse — nicht alles über dieselben Ziel-Ports präsentieren.
+  - **Getrennte Host-NQNs** für die lokale und die Metro-Anbindung, damit der Host nicht zwei Subsysteme mit gleicher NDSID sieht.
+  - **Alternativ die Klassen trennen:** lokal-only über iSCSI/FC, Metro über NVMe-oF (oder umgekehrt) — die Kombination NVMe/TCP + iSCSI **auf der Array** ist laut HPE erlaubt, auf demselben **Host** nicht.
 
 **Resilienz Linux-VMs:**
 
@@ -232,7 +236,7 @@ Ein Proxmox-Forum-Fall (PVE 9.2, **zwei aktiv-aktiv gespiegelte HPE-Alletra-Arra
 
 | # | Ebene | Empfehlung |
 |---|---|---|
-| 1 | **Primär-VM-Storage** | HPE Alletra B10000 über **NVMe-oF** — Transport nach Fabric wählen ([2.4](#24-nvme-of-im-detail--die-transporte)): **NVMe/FC** bei vorhandenem SAN, sonst **NVMe/TCP**; iSCSI/FC + LVM als gleichwertiger Fallback. LVM auf dem Multipath-Device, als *shared* markiert |
+| 1 | **Primär-VM-Storage** | HPE Alletra B10000 über **NVMe-oF** — Transport nach Fabric wählen ([2.4](#24-nvme-of-im-detail--die-transporte)): **NVMe/FC** bei vorhandenem SAN, sonst **NVMe/TCP**; iSCSI/FC + LVM als gleichwertiger Fallback. Einbindung: [4.1.1](#411-einbindung-in-proxmox-ve), **Vorprüfung NQN/NDSID: [4.1.2](#412-der-metro-paar-fallstrick)** |
 | 2 | **ISO / Templates / Snippets** | NFS von Alletra oder Directory auf einem der Nodes |
 | 3 | **Backup** | PBS (möglichst redundant an beiden Standorten oder mit PBS-Sync) |
 | 4 | **Optional** | Lokales ZFS/LVM-Thin für extrem latenzsensitive Workloads + ZFS-Replication oder PBS |
