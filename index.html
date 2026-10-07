@@ -176,7 +176,7 @@
         <div class="pulse-dot"></div>
         <h1>KRITIS Zielarchitektur — Proxmox + Kubernetes</h1>
       </div>
-      <p class="subtitle">2 Standorte · 4 Kubernetes-Cluster · Legacy-Metro + Ceph in den Standorten · Werkzeuge &amp; Erläuterungen getrennt darunter</p>
+      <p class="subtitle">2 Standorte · 4 Kubernetes-Cluster · HPE Alletra MP B10000 als Metro-Paar (lokal präsentiert + synchron gespiegelt) · gestreckter Proxmox-Cluster · Werkzeuge &amp; Erläuterungen getrennt darunter</p>
     </div>
 
     <!-- Modus-Umschalter: Aktiv/Passiv vs. Aktiv/Aktiv -->
@@ -224,33 +224,13 @@
 
         <!-- ============ ARROWS (hinter Boxen) ============ -->
 
-        <!-- K8s-Nodes → Cluster (Nodes bilden die Cluster) -->
-        <line x1="492" y1="272" x2="492" y2="296" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowemerald)"/>
-        <text x="500" y="288" fill="#34d399" font-size="8">bilden</text>
-        <line x1="1192" y1="272" x2="1192" y2="296" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowemerald)"/>
-        <text x="1200" y="288" fill="#34d399" font-size="8">bilden</text>
+        <!-- K8s-Nodes → Cluster: wird NACH den Standort-Boundaries gezeichnet (sonst verdeckt) -->
 
-        <!-- Cilium ClusterMesh: Prod-1 ↔ Prod-2 -->
-        <line x1="334" y1="360" x2="748" y2="360" stroke="#fb7185" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowrose)"/>
-        <line x1="748" y1="375" x2="334" y2="375" stroke="#fb7185" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowrose)"/>
-        <rect x="430" y="343" width="220" height="62" rx="6" fill="#0f172a" stroke="none"/>
-        <rect x="430" y="343" width="220" height="62" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
-        <text x="540" y="361" fill="white" font-size="10" font-weight="600" text-anchor="middle">ClusterMesh</text>
-        <text x="540" y="377" fill="#fb7185" font-size="8" text-anchor="middle" class="mode-passiv">standortunabhängige Services (DR)</text>
-        <text x="540" y="377" fill="#fb7185" font-size="8" text-anchor="middle" class="mode-aktiv" style="display:none">Lastverteilung über beide Standorte</text>
-        <text x="540" y="393" fill="#94a3b8" font-size="7" text-anchor="middle">erstellt mit Cilium + Hubble (eBPF)</text>
+        <!-- Cilium ClusterMesh: wird NACH den Cluster-Boxen gezeichnet (sonst von Test/Quality verdeckt) -->
 
-        <!-- Ceph async Replikation zwischen den getrennten Clustern A ↔ B -->
-        <line x1="650" y1="560" x2="748" y2="560" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
-        <line x1="750" y1="576" x2="652" y2="576" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
-        <rect x="652" y="543" width="96" height="70" rx="6" fill="#0f172a" stroke="none"/>
-        <rect x="652" y="543" width="96" height="70" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
-        <text x="700" y="559" fill="#a78bfa" font-size="8" text-anchor="middle">async</text>
-        <text x="700" y="573" fill="#a78bfa" font-size="8" text-anchor="middle">Replikation</text>
-        <text x="700" y="589" fill="#94a3b8" font-size="7" text-anchor="middle">Patroni /</text>
-        <text x="700" y="599" fill="#94a3b8" font-size="7" text-anchor="middle">RBD-Mirror</text>
+        <!-- Alletra Metro-Paar: synchroner Spiegel (wird NACH den Standort-Boundaries gezeichnet) -->
 
-        <!-- ============ STANDORT-BOUNDARIES (Pools, Cluster, Legacy-Metro, Ceph) ============ -->
+        <!-- ============ STANDORT-BOUNDARIES (Pools, K8s-Cluster, Stretched-Cluster, Alletra) ============ -->
 
         <!-- Standort A -->
         <rect x="30" y="50" width="640" height="840" rx="12" fill="#0f172a"/>
@@ -269,8 +249,10 @@
         <rect x="674" y="90" width="52" height="370" rx="6" fill="rgba(120, 53, 15, 0.2)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,4"/>
         <text x="700" y="360" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">100-Gb/s</text>
         <text x="700" y="374" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">Metro-Link</text>
+        <text x="700" y="404" fill="#a78bfa" font-size="8" font-weight="600" text-anchor="middle">Corosync</text>
+        <text x="700" y="416" fill="#a78bfa" font-size="8" text-anchor="middle">&lt; 5 ms</text>
 
-        <!-- Innere Boundary-Kanten im Bereich der übergreifenden Boxen (Legacy-Metro, Ceph) abdecken -->
+        <!-- Innere Boundary-Kanten im Sichtfenster zwischen den Standorten abdecken (Stretched-Cluster, Metro-Paar) -->
         <rect x="662" y="660" width="76" height="210" fill="#0f172a"/>
 
         <!-- ============ POOL A ============ -->
@@ -283,7 +265,7 @@
         <rect x="70" y="150" width="265" height="100" rx="6" fill="#0f172a"/>
         <rect x="70" y="150" width="265" height="100" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
         <text x="202" y="172" fill="white" font-size="11" font-weight="600" text-anchor="middle">Legacy VMs</text>
-        <text x="202" y="188" fill="#94a3b8" font-size="9" text-anchor="middle">standortgebunden</text>
+        <text x="202" y="188" fill="#94a3b8" font-size="9" text-anchor="middle">HA über beide Standorte</text>
         <text x="202" y="206" fill="#fbbf24" font-size="8" text-anchor="middle">Migration in Wellen</text>
         <text x="202" y="224" fill="#94a3b8" font-size="8" text-anchor="middle">Backup via Proxmox Backup Server</text>
 
@@ -299,13 +281,13 @@
         <rect x="750" y="100" width="600" height="170" rx="8" fill="#0f172a"/>
         <rect x="750" y="100" width="600" height="170" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
         <text x="766" y="120" fill="white" font-size="11" font-weight="600">Proxmox VE — Pool B</text>
-        <text x="766" y="134" fill="#94a3b8" font-size="8">Gleicher Stack, gleiche Definition via Ansible</text>
+        <text x="766" y="134" fill="#94a3b8" font-size="8">Gleicher Stack, gleiche Definition via OpenTofu (IaC)</text>
 
         <!-- Legacy VMs B -->
         <rect x="770" y="150" width="265" height="100" rx="6" fill="#0f172a"/>
         <rect x="770" y="150" width="265" height="100" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
         <text x="902" y="172" fill="white" font-size="11" font-weight="600" text-anchor="middle">Legacy VMs</text>
-        <text x="902" y="188" fill="#94a3b8" font-size="9" text-anchor="middle">Standort B · DR-Fähigkeit</text>
+        <text x="902" y="188" fill="#94a3b8" font-size="9" text-anchor="middle">HA über beide Standorte</text>
         <text x="902" y="206" fill="#fbbf24" font-size="8" text-anchor="middle">Failover-Ziel</text>
         <text x="902" y="224" fill="#94a3b8" font-size="8" text-anchor="middle">Backup via Proxmox Backup Server</text>
 
@@ -327,7 +309,7 @@
         <text x="191" y="362" fill="#94a3b8" font-size="9" text-anchor="middle">3 Control-Plane + Worker</text>
         <text x="191" y="378" fill="#94a3b8" font-size="9" text-anchor="middle">auf Kubernetes-Nodes (Pool A)</text>
         <text x="191" y="396" fill="#94a3b8" font-size="8" text-anchor="middle">Cilium + Hubble (Netzwerk/Observability)</text>
-        <text x="191" y="414" fill="#a78bfa" font-size="8" text-anchor="middle">Persistent Volumes via Ceph CSI</text>
+        <text x="191" y="414" fill="#a78bfa" font-size="8" text-anchor="middle">Persistent Volumes via HPE CSI (Alletra)</text>
         <text x="191" y="432" fill="#fb7185" font-size="8" text-anchor="middle">ClusterMesh-Peer</text>
 
         <!-- Test -->
@@ -355,7 +337,7 @@
         <text x="891" y="378" fill="#94a3b8" font-size="9" text-anchor="middle">auf Kubernetes-Nodes (Pool B)</text>
         <text x="891" y="396" fill="#94a3b8" font-size="8" text-anchor="middle" class="mode-passiv">Failover via Global Load Balancer / DNS</text>
         <text x="891" y="396" fill="#94a3b8" font-size="8" text-anchor="middle" class="mode-aktiv" style="display:none">Stateless beidseitig · Read-Replicas lokal · GSLB 50/50</text>
-        <text x="891" y="414" fill="#a78bfa" font-size="8" text-anchor="middle">Persistent Volumes via Ceph CSI</text>
+        <text x="891" y="414" fill="#a78bfa" font-size="8" text-anchor="middle">Persistent Volumes via HPE CSI (Alletra)</text>
         <text x="891" y="432" fill="#fb7185" font-size="8" text-anchor="middle">ClusterMesh-Peer</text>
 
         <!-- Quality-B optional -->
@@ -367,47 +349,76 @@
         <text x="1191" y="380" fill="#94a3b8" font-size="9" text-anchor="middle">DR-Übungen</text>
         <text x="1191" y="412" fill="#94a3b8" font-size="8" text-anchor="middle">nur wenn Budget</text>
 
-        <!-- ============ LEGACY METRO (in den Standorten, über beide Standorte) ============ -->
-        <rect x="50" y="660" width="1270" height="90" rx="10" fill="#0f172a"/>
-        <rect x="50" y="660" width="1270" height="90" rx="10" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
-        <text x="685" y="684" fill="white" font-size="12" font-weight="600" text-anchor="middle">Legacy VMs — Metro (liegt in BEIDEN Standorten vor)</text>
-        <text x="685" y="702" fill="#94a3b8" font-size="9" text-anchor="middle">Ein logisches Cluster über beide Standorte · Failover-Clustering / Oracle RAC / Legacy ohne Multi-DC-Logik</text>
-        <text x="685" y="720" fill="#a78bfa" font-size="8" text-anchor="middle">Metro-VMs auf SAN (HPE Alletra, Peer Persistence) — RBD ist NICHT multi-writer-fähig, FCI/RAC brauchen Shared Storage</text>
-        <text x="685" y="738" fill="#fb7185" font-size="8" text-anchor="middle">Kein gestrecktes etcd — diese Workloads laufen auf VM-Ebene, nicht in Kubernetes</text>
+        <!-- K8s-Nodes → Cluster (Nodes bilden die Cluster) — hier gezeichnet, sonst von den Standort-Boundaries verdeckt -->
+        <line x1="492" y1="272" x2="492" y2="296" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowemerald)"/>
+        <text x="500" y="288" fill="#34d399" font-size="8">bilden</text>
+        <line x1="1192" y1="272" x2="1192" y2="296" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowemerald)"/>
+        <text x="1200" y="288" fill="#34d399" font-size="8">bilden</text>
 
-        <!-- ============ CEPH — getrennte Cluster je Datacenter (KEIN Metro-Speicher) ============ -->
+        <!-- ============ Cilium ClusterMesh: Prod-1 ↔ Prod-2 (NACH den Cluster-Boxen = sichtbar) ============ -->
+        <line x1="191" y1="466" x2="886" y2="466" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arrowrose)"/>
+        <line x1="891" y1="476" x2="196" y2="476" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arrowrose)"/>
+        <rect x="371" y="457" width="340" height="26" rx="6" fill="#0f172a" stroke="none"/>
+        <rect x="371" y="457" width="340" height="26" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="541" y="466" fill="white" font-size="9" font-weight="600" text-anchor="middle">ClusterMesh</text>
+        <text x="541" y="477" fill="#fb7185" font-size="7" text-anchor="middle">Prod-1 ↔ Prod-2 · standortunabhängig (Cilium eBPF)</text>
 
-        <!-- Ceph-Cluster A (lokal in Datacenter A) -->
+        <!-- ============ STRETCHED PROXMOX-CLUSTER (EIN Cluster über beide Standorte) ============ -->
+        <rect x="50" y="660" width="1270" height="96" rx="10" fill="#0f172a"/>
+        <rect x="50" y="660" width="1270" height="96" rx="10" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="685" y="684" fill="white" font-size="12" font-weight="600" text-anchor="middle">Gestreckter Proxmox-Cluster — VMs (liegt in BEIDEN Standorten vor)</text>
+        <text x="685" y="702" fill="#94a3b8" font-size="9" text-anchor="middle">EIN Proxmox-Cluster über beide Standorte · VM-Disks auf dem Alletra-Metro-Paar · Live-Migration + HA über den Metro-Link</text>
+        <text x="685" y="720" fill="#a78bfa" font-size="8" text-anchor="middle">Corosync läuft über den Metro-Link (&lt; 5 ms) · Timeouts: token + consensus &lt; 45 s halten (HA-Watchdog feuert bei 60 s)</text>
+        <text x="685" y="737" fill="#fb7185" font-size="8" text-anchor="middle">3. Stimme NICHT in A oder B: Corosync-QDevice an einem dritten Standort (TCP/IP — kein Latenz-Budget) · redundanter Metro-Pfad</text>
+        <text x="685" y="750" fill="#94a3b8" font-size="8" text-anchor="middle">FCI/RAC brauchen Multi-Writer (SCSI-3 Persistent Reservations) — auf dem Alletra-Metro-Paar möglich</text>
+
+        <!-- ============ HPE ALLETRA MP B10000 — 2 Systeme, EIN Metro-Paar ============ -->
+
+        <!-- Alletra Site A -->
         <rect x="50" y="485" width="600" height="150" rx="10" fill="#0f172a"/>
         <rect x="50" y="485" width="600" height="150" rx="10" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <a href="https://ceph.io/" target="_blank"><text x="350" y="509" fill="white" font-size="12" font-weight="600" text-anchor="middle">Ceph-Cluster A ↗ — Datacenter A</text></a>
-        <text x="350" y="527" fill="#94a3b8" font-size="9" text-anchor="middle">lokal im Standort · VM-Disks + Kubernetes-Persistent-Volumes (Ceph CSI)</text>
-        <rect x="80" y="543" width="260" height="70" rx="6" fill="#0f172a"/>
-        <rect x="80" y="543" width="260" height="70" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="210" y="563" fill="white" font-size="9" font-weight="600" text-anchor="middle">OSD — Object Storage Daemon</text>
-        <text x="210" y="579" fill="#94a3b8" font-size="7" text-anchor="middle">3 Monitore = eigenes Quorum</text>
-        <text x="210" y="595" fill="#94a3b8" font-size="7" text-anchor="middle">RADOS Block Device → VM-Disks</text>
-        <text x="350" y="626" fill="#a78bfa" font-size="8" text-anchor="middle">etcd lokal NVMe · OSD-Disks im HBA-Modus (nie RAID)</text>
+        <a href="https://www.hpe.com/de/de/storage/alletra-storage-mp.html" target="_blank"><text x="350" y="509" fill="white" font-size="12" font-weight="600" text-anchor="middle">HPE Alletra MP B10000 — Site A ↗</text></a>
+        <text x="350" y="527" fill="#94a3b8" font-size="9" text-anchor="middle">System 1 von 2 · präsentiert LUNs/Namespaces LOKAL — kein Metro-Roundtrip im I/O-Pfad</text>
+        <rect x="80" y="543" width="290" height="70" rx="6" fill="#0f172a"/>
+        <rect x="80" y="543" width="290" height="70" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="225" y="561" fill="white" font-size="9" font-weight="600" text-anchor="middle">Block: iSCSI / FC / NVMe-oF</text>
+        <text x="225" y="577" fill="#94a3b8" font-size="7" text-anchor="middle">NVMe/TCP · Multi-Path (dm-multipath</text>
+        <text x="225" y="588" fill="#94a3b8" font-size="7" text-anchor="middle">bzw. nativer NVMe-Multipath)</text>
+        <text x="225" y="603" fill="#94a3b8" font-size="7" text-anchor="middle">Dual-Fabric A/B gegen Pfadausfall</text>
+        <text x="350" y="626" fill="#a78bfa" font-size="8" text-anchor="middle">VM-Disks des gestreckten Proxmox-Clusters · K8s-PVs via HPE CSI Driver</text>
 
-        <!-- Ceph-Cluster B (lokal in Datacenter B) -->
+        <!-- Alletra Site B -->
         <rect x="750" y="485" width="600" height="150" rx="10" fill="#0f172a"/>
         <rect x="750" y="485" width="600" height="150" rx="10" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <a href="https://ceph.io/" target="_blank"><text x="1050" y="509" fill="white" font-size="12" font-weight="600" text-anchor="middle">Ceph-Cluster B ↗ — Datacenter B</text></a>
-        <text x="1050" y="527" fill="#94a3b8" font-size="9" text-anchor="middle">lokal im Standort · VM-Disks + Kubernetes-Persistent-Volumes (Ceph CSI)</text>
-        <rect x="1080" y="543" width="260" height="70" rx="6" fill="#0f172a"/>
-        <rect x="1080" y="543" width="260" height="70" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1.5"/>
-        <!-- ============ STRETCHED-STORAGE (SAN, für die Metro-VMs) ============ -->
-        <rect x="50" y="780" width="1270" height="90" rx="10" fill="#0f172a"/>
-        <rect x="50" y="780" width="1270" height="90" rx="10" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="685" y="804" fill="white" font-size="12" font-weight="600" text-anchor="middle">Stretched-Storage — SAN (HPE Alletra, Peer Persistence)</text>
-        <text x="685" y="822" fill="#94a3b8" font-size="9" text-anchor="middle">EINZIGER echter Metro-Speicher · Multi-Writer (SCSI-3 Persistent Reservations) für FCI/RAC · synchron über den Metro-Link</text>
-        <text x="685" y="840" fill="#a78bfa" font-size="8" text-anchor="middle">Nur für die Metro-VMs oben — alle anderen Workloads liegen auf dem lokalen Ceph</text>
-        <text x="685" y="858" fill="#fb7185" font-size="8" text-anchor="middle">Der Witness der Cluster-Software muss außerhalb des ausfallenden Standorts liegen</text>
+        <a href="https://www.hpe.com/de/de/storage/alletra-storage-mp.html" target="_blank"><text x="1050" y="509" fill="white" font-size="12" font-weight="600" text-anchor="middle">HPE Alletra MP B10000 — Site B ↗</text></a>
+        <text x="1050" y="527" fill="#94a3b8" font-size="9" text-anchor="middle">System 2 von 2 · lokale Präsentation in Site B — Active/Active-Peer des Paares</text>
+        <rect x="1080" y="543" width="290" height="70" rx="6" fill="#0f172a"/>
+        <rect x="1080" y="543" width="290" height="70" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1225" y="561" fill="white" font-size="9" font-weight="600" text-anchor="middle">Datei: NFS (Templates/ISOs)</text>
+        <text x="1225" y="577" fill="#94a3b8" font-size="7" text-anchor="middle">Block für K8s: HPE CSI Driver +</text>
+        <text x="1225" y="588" fill="#94a3b8" font-size="7" text-anchor="middle">Active Peer Persistence → auto-</text>
+        <text x="1225" y="603" fill="#94a3b8" font-size="7" text-anchor="middle">matische Workload-Recovery</text>
+        <text x="1050" y="626" fill="#fb7185" font-size="8" text-anchor="middle">Anwendungs-Replikation bleibt Pflicht: CloudNativePG (K8s) · Patroni (DB-VMs)</text>
 
-        <text x="1210" y="563" fill="white" font-size="9" font-weight="600" text-anchor="middle">OSD — Object Storage Daemon</text>
-        <text x="1210" y="579" fill="#94a3b8" font-size="7" text-anchor="middle">3 Monitore = eigenes Quorum</text>
-        <text x="1210" y="595" fill="#94a3b8" font-size="7" text-anchor="middle">RADOS Block Device → VM-Disks</text>
-        <text x="1050" y="626" fill="#a78bfa" font-size="8" text-anchor="middle">RBD = single-writer (kein RAC) → Metro-VMs auf SAN · Rook nur bei separatem Kubernetes-Ceph</text>
+        <!-- Metro-Spiegel zwischen den beiden Systemen — Text/Arrows im Sichtfenster 670..730 zwischen den Standort-Boundaries -->
+        <line x1="656" y1="562" x2="744" y2="562" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
+        <line x1="744" y1="580" x2="656" y2="580" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowviolet)"/>
+        <text x="700" y="552" fill="#a78bfa" font-size="8" font-weight="600" text-anchor="middle">Metro-Sync</text>
+        <text x="700" y="598" fill="#94a3b8" font-size="7" text-anchor="middle">Peer</text>
+        <text x="700" y="608" fill="#94a3b8" font-size="7" text-anchor="middle">Persistence</text>
+
+        <!-- Übergang Storage- -> App-Ebene -->
+        <rect x="646" y="635" width="108" height="22" rx="6" fill="#0f172a" stroke="none"/>
+        <rect x="646" y="635" width="108" height="22" rx="6" fill="rgba(30, 41, 59, 0.9)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="700" y="650" fill="#94a3b8" font-size="7" text-anchor="middle">async: CNPG / Patroni</text>
+
+        <!-- ============ ALLETRA METRO-PAAR (Metro-Storage für VMs und K8s-Cluster) ============ -->
+        <rect x="50" y="772" width="1270" height="96" rx="10" fill="#0f172a"/>
+        <rect x="50" y="772" width="1270" height="96" rx="10" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="685" y="796" fill="white" font-size="12" font-weight="600" text-anchor="middle">Alletra-Metro-Paar — EIN Speichersystem über beide Standorte (Peer Persistence)</text>
+        <text x="685" y="814" fill="#94a3b8" font-size="9" text-anchor="middle">Synchroner Spiegel über den Metro-Link · transparentes Failover · die Array-eigene Quorum-Witness entscheidet (kein Storage-Split-Brain)</text>
+        <text x="685" y="832" fill="#a78bfa" font-size="8" text-anchor="middle">Storage für den gestreckten Proxmox-Cluster (VM-Disks) UND für Kubernetes-Cluster mit Metro-Storage-Bedarf</text>
+        <text x="685" y="850" fill="#fb7185" font-size="8" text-anchor="middle">RPO 0 auf Storage-Ebene — die Anwendungs-Replikation (CNPG/Patroni) läuft zusätzlich über beide Standorte</text>
 
         <!-- ============ WERKZEUGE (außerhalb der Standort-Boxen) ============ -->
         <rect x="330" y="900" width="710" height="20" fill="#0f172a"/>
@@ -458,19 +469,19 @@
         <text x="80" y="1092" fill="#94a3b8" font-size="8">Hubble: Flow-Logs, Service-Map, Metriken (Observability)</text>
         <text x="80" y="1106" fill="#94a3b8" font-size="7">github.com/cilium/cilium · github.com/cilium/hubble · docs.cilium.io</text>
 
-        <!-- ============ ANSIBLE (außerhalb, für Infrastruktur) ============ -->
+        <!-- ============ OPENTOFU (außerhalb, für Infrastruktur) ============ -->
         <rect x="300" y="1140" width="770" height="20" fill="#0f172a"/>
-        <text x="685" y="1150" fill="#fbbf24" font-size="11" font-weight="600" text-anchor="middle">Infrastructure as Code — EIN Werkzeug: Ansible (für Proxmox / Ceph / Nodes / Legacy-VMs)</text>
+        <text x="685" y="1150" fill="#fbbf24" font-size="11" font-weight="600" text-anchor="middle">Infrastructure as Code — EIN Werkzeug: OpenTofu (Proxmox-VMs, Hosts, Netzwerk, Legacy-VMs)</text>
 
-        <!-- Ansible -->
+        <!-- OpenTofu -->
         <rect x="50" y="1160" width="1270" height="125" rx="8" fill="#0f172a"/>
         <rect x="50" y="1160" width="1270" height="125" rx="8" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-        <a href="https://www.ansible.com/" target="_blank"><text x="685" y="1184" fill="white" font-size="12" font-weight="600" text-anchor="middle">Ansible ↗</text></a>
-        <text x="685" y="1202" fill="#94a3b8" font-size="9" text-anchor="middle">IaC + Config-Management in einem — Terraform wird NICHT zusätzlich gebraucht</text>
-        <text x="685" y="1220" fill="#94a3b8" font-size="8" text-anchor="middle">Proxmox-Hosts · Ceph-OSD (Object Storage Daemon) · Netzwerk-Baseline · Node-Images vorbereiten</text>
-        <text x="685" y="1238" fill="#94a3b8" font-size="8" text-anchor="middle">Legacy-VMs (Konfiguration, Anwendungs-Deploy) · Patch-Management außerhalb Kubernetes · beide Standorte identisch</text>
-        <text x="685" y="1258" fill="#fbbf24" font-size="8" text-anchor="middle">NICHT für Cluster-Inhalte — das macht GitOps (ArgoCD + Cluster API)</text>
-        <text x="685" y="1276" fill="#94a3b8" font-size="7" text-anchor="middle">github.com/ansible/ansible · docs.ansible.com · Proxmox-Module: community.general</text>
+        <a href="https://opentofu.org/" target="_blank"><text x="685" y="1184" fill="white" font-size="12" font-weight="600" text-anchor="middle">OpenTofu ↗</text></a>
+        <text x="685" y="1202" fill="#94a3b8" font-size="9" text-anchor="middle">Provisioning + Config-Management — ersetzt Ansible vollständig (deklarativ, planbar, idempotent)</text>
+        <text x="685" y="1220" fill="#94a3b8" font-size="8" text-anchor="middle">Proxmox-VMs/-Container über den Proxmox-Provider (bpg/proxmox) · Hosts · Netzwerk-Baseline · Node-Images</text>
+        <text x="685" y="1238" fill="#94a3b8" font-size="8" text-anchor="middle">Legacy-VM-Konfiguration und Anwendungs-Deploy · beide Standorte deklarativ identisch</text>
+        <text x="685" y="1258" fill="#fbbf24" font-size="8" text-anchor="middle">State zentral + verschlüsselt (keine Secrets im Klartext) · NICHT für Cluster-Inhalte — das macht GitOps (ArgoCD + Cluster API)</text>
+        <text x="685" y="1276" fill="#94a3b8" font-size="7" text-anchor="middle">opentofu.org · Registry: bpg/proxmox (Terraform-/OpenTofu-Provider für Proxmox VE, BPG Labs)</text>
 
         <!-- ============ ERLÄUTERUNGEN (getrennt, außerhalb) ============ -->
         <text x="685" y="1320" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">────── Erläuterungen (getrennt von der Architektur) ──────</text>
@@ -478,59 +489,58 @@
         <!-- Quorum & Split-Brain -->
         <rect x="50" y="1340" width="625" height="235" rx="8" fill="#0f172a"/>
         <rect x="50" y="1340" width="625" height="235" rx="8" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="70" y="1364" fill="white" font-size="11" font-weight="600">Quorum &amp; Split-Brain — warum KEIN Standort C?</text>
-        <text x="70" y="1386" fill="#94a3b8" font-size="9">Split-Brain entsteht nur, wenn EIN logisches System an beiden</text>
-        <text x="70" y="1402" fill="#94a3b8" font-size="9">Standorten schreiben kann (gestrecktes Cluster, geteilter Storage).</text>
-        <text x="70" y="1418" fill="#94a3b8" font-size="9">Getrennte Systeme je Standort — kein System über beide gespannt:</text>
-        <text x="70" y="1436" fill="#34d399" font-size="9">• Kubernetes: Prod-1 (A) + Prod-2 (B) getrennte Cluster — etcd-</text>
-        <text x="70" y="1452" fill="#34d399" font-size="9">  Quorum (3 Control-Plane-Nodes) liegt lokal im eigenen Standort</text>
-        <text x="70" y="1468" fill="#94a3b8" font-size="9">• Legacy-VMs: laufen in A oder B — Proxmox-Quorum je Standort</text>
-        <text x="70" y="1484" fill="#94a3b8" font-size="9">  (ungerade Node-Zahl + Quorum Device)</text>
-        <text x="70" y="1500" fill="#94a3b8" font-size="9">• Ceph: getrennt pro Datacenter — Quorum lokal, keine synchrone</text>
-        <text x="70" y="1516" fill="#94a3b8" font-size="9">  Abhängigkeit vom Metro-Link</text>
-        <text x="70" y="1532" fill="#94a3b8" font-size="9">• Link-Ausfall A↔B: beide Standorte arbeiten unabhängig weiter</text>
-        <text x="70" y="1548" fill="#fb7185" font-size="9">Ausnahme Metro-VMs (FCI/RAC): der Witness entscheidet — muss</text>
-        <text x="70" y="1564" fill="#fb7185" font-size="9">  außerhalb des ausfallenden Standorts liegen (Platzierung!)</text>
+        <text x="70" y="1364" fill="white" font-size="11" font-weight="600">Quorum &amp; Split-Brain — wer entscheidet bei Trennung?</text>
+        <text x="70" y="1386" fill="#94a3b8" font-size="9">Der Proxmox-Cluster IST gestreckt — die 3. Stimme darf deshalb</text>
+        <text x="70" y="1402" fill="#94a3b8" font-size="9">NICHT in Standort A oder B liegen:</text>
+        <text x="70" y="1422" fill="#a78bfa" font-size="9">• Corosync-QDevice (corosync-qnetd) an einem dritten Standort —</text>
+        <text x="70" y="1438" fill="#a78bfa" font-size="9">  läuft über TCP/IP und unterliegt NICHT dem 5-ms-Budget</text>
+        <text x="70" y="1458" fill="#a78bfa" font-size="9">• Alletra-Metro-Paar: die Array-eigene Quorum-Witness entscheidet,</text>
+        <text x="70" y="1474" fill="#a78bfa" font-size="9">  welches System präsentiert → kein Storage-Split-Brain</text>
+        <text x="70" y="1494" fill="#34d399" font-size="9">• Kubernetes: etcd bleibt STANDORTLOKAL (3 Control-Plane im</text>
+        <text x="70" y="1510" fill="#34d399" font-size="9">  eigenen DC) — kein gestrecktes etcd über die Standorte</text>
+        <text x="70" y="1530" fill="#fb7185" font-size="9">• Link A↔B fällt aus: kein automatischer VM-Start in B (kein</text>
+        <text x="70" y="1546" fill="#fb7185" font-size="9">  Quorum) — QDevice + redundanter Metro-Pfad müssen entscheiden</text>
+        <text x="70" y="1566" fill="#94a3b8" font-size="9">• Echter Standortausfall: VM-Start im Rest-DC, DB-Promotion</text>
 
-        <!-- Ceph & Hardware -->
+        <!-- Storage & Hardware -->
         <rect x="695" y="1340" width="625" height="235" rx="8" fill="#0f172a"/>
         <rect x="695" y="1340" width="625" height="235" rx="8" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="715" y="1364" fill="white" font-size="11" font-weight="600">Ceph-Aufbau &amp; Hardware</text>
-        <text x="715" y="1386" fill="#94a3b8" font-size="9">• Ceph: OSD (Object Storage Daemon) = Server-Disk, 3 Monitore</text>
-        <text x="715" y="1402" fill="#94a3b8" font-size="9">  = Quorum JE Datacenter — getrennte Cluster (KEIN Stretch über</text>
-        <text x="715" y="1418" fill="#94a3b8" font-size="9">  2 DCs: 3 Replicas über 2 DCs tragen keinen Standortausfall,</text>
-        <text x="715" y="1434" fill="#94a3b8" font-size="9">  3 Monitore 2+1 = Quorumverlust bei Ausfall der 2er-Seite)</text>
-        <text x="715" y="1450" fill="#94a3b8" font-size="9">• Rook-Ceph NUR bei getrenntem Ceph für Kubernetes — sonst Ceph CSI direkt aufs Proxmox-Ceph</text>
-        <text x="715" y="1466" fill="#94a3b8" font-size="9">• Server: 2× NVMe (OS, RAID1) + NVMe/SSD als OSD · 25-Gigabit-Ethernet+</text>
-        <text x="715" y="1482" fill="#94a3b8" font-size="9">• etcd: lokale NVMe der Control-Plane-Nodes — NIE auf Ceph</text>
-        <text x="715" y="1498" fill="#94a3b8" font-size="9">• Storage Area Network (SAN, z.B. HPE Alletra): nur noch für</text>
-        <text x="715" y="1514" fill="#94a3b8" font-size="9">  Metro-VMs (FCI/RAC, Shared-Storage-Pflicht) — RBD single-writer</text>
-        <text x="715" y="1530" fill="#94a3b8" font-size="9">• Ceph ersetzt das SAN für alle anderen Workloads</text>
-        <text x="715" y="1546" fill="#94a3b8" font-size="9">• Patroni: PostgreSQL-HA — Failover + async Replikation in den DR-Standort</text>
-        <text x="715" y="1562" fill="#94a3b8" font-size="9">• RBD-Mirror: Ceph-eigenes async Spiegeln von RBD-Images zwischen den Clustern</text>
+        <text x="715" y="1364" fill="white" font-size="11" font-weight="600">Storage-Aufbau &amp; Hardware</text>
+        <text x="715" y="1386" fill="#94a3b8" font-size="9">• HPE Alletra MP B10000 = 2 Systeme, EIN Metro-Paar: jedes System</text>
+        <text x="715" y="1402" fill="#94a3b8" font-size="9">  präsentiert lokal, gespiegelt wird synchron über den Metro-Link</text>
+        <text x="715" y="1422" fill="#94a3b8" font-size="9">• Block-Anbindung: iSCSI / FC / NVMe-oF (FC oder TCP) über</text>
+        <text x="715" y="1438" fill="#94a3b8" font-size="9">  DUAL-FABRIC (2 getrennte Switches) + Multipath im Gast</text>
+        <text x="715" y="1458" fill="#94a3b8" font-size="9">• K8s-PVs: HPE CSI Driver — Active Peer Persistence liefert</text>
+        <text x="715" y="1474" fill="#94a3b8" font-size="9">  automatische Workload-Recovery beim Array-Failover</text>
+        <text x="715" y="1494" fill="#94a3b8" font-size="9">• Die Array ersetzt die bisherige Software-Storage-Schicht komplett</text>
+        <text x="715" y="1510" fill="#94a3b8" font-size="9">• Server: 2× NVMe (OS, RAID1) · 25-Gigabit-Ethernet+</text>
+        <text x="715" y="1530" fill="#94a3b8" font-size="9">• etcd: lokale NVMe der Control-Plane-Nodes — NIE auf dem</text>
+        <text x="715" y="1546" fill="#94a3b8" font-size="9">  Metro-Storage (etcd verträgt keine Metro-Latenz)</text>
+        <text x="715" y="1566" fill="#94a3b8" font-size="9">• DB-Replikation: CloudNativePG (K8s) · Patroni (DB-VMs)</text>
 
         <!-- Datenhaltung -->
         <rect x="50" y="1595" width="625" height="235" rx="8" fill="#0f172a"/>
         <rect x="50" y="1595" width="625" height="235" rx="8" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
         <text x="70" y="1619" fill="white" font-size="11" font-weight="600">Datenhaltung — wo liegt was?</text>
         <text x="70" y="1641" fill="#94a3b8" font-size="9">• etcd (Cluster-State): lokale NVMe der Control-Plane-Nodes</text>
-        <text x="70" y="1659" fill="#94a3b8" font-size="9">• Datenbank-Daten: Persistent Volumes auf Ceph (RADOS Block</text>
-        <text x="70" y="1675" fill="#94a3b8" font-size="9">  Device) oder dedizierte Datenbank-VMs auf Ceph/SAN</text>
-        <text x="70" y="1693" fill="#94a3b8" font-size="9">• Konfiguration/Code: Git-Repo (GitOps) · Images: Harbor</text>
-        <text x="70" y="1721" fill="#94a3b8" font-size="9">• Secrets: Vault + External Secrets Operator (GitOps-Bridge!)</text>
-        <text x="70" y="1737" fill="#94a3b8" font-size="9">• Policy: Kyverno (Pod Security, Image-Verify) · Logs: Loki + SIEM</text>
-        <text x="70" y="1755" fill="#94a3b8" font-size="9">• Zustandslose Applikationen: kein Persistent Volume nötig</text>
-        <text x="70" y="1771" fill="#94a3b8" font-size="9">• Backups: Proxmox Backup Server (VMs) + Velero (Kubernetes)</text>
-        <text x="70" y="1787" fill="#94a3b8" font-size="9">  + Datenbank-Dumps → MinIO</text>
-        <text x="70" y="1811" fill="#a78bfa" font-size="8">Regel: Zustandsdaten auf Ceph (repliziert), Cluster-State lokal (schnell)</text>
+        <text x="70" y="1659" fill="#94a3b8" font-size="9">• VM-Disks: Alletra-Metro-Paar (Block, synchron gespiegelt)</text>
+        <text x="70" y="1677" fill="#94a3b8" font-size="9">• K8s-Persistent-Volumes: Alletra über HPE CSI Driver</text>
+        <text x="70" y="1695" fill="#94a3b8" font-size="9">• Datenbanken: Postgres als CloudNativePG-Cluster (K8s) bzw.</text>
+        <text x="70" y="1711" fill="#94a3b8" font-size="9">  Patroni in VMs — Replikation reicht über beide Standorte</text>
+        <text x="70" y="1731" fill="#94a3b8" font-size="9">• Konfiguration/Code: Git-Repo (GitOps) · Images: Harbor</text>
+        <text x="70" y="1749" fill="#94a3b8" font-size="9">• Secrets: Vault + External Secrets Operator · Policy: Kyverno</text>
+        <text x="70" y="1767" fill="#94a3b8" font-size="9">• Logs: Loki + SIEM · Zustandslose Apps: kein PV nötig</text>
+        <text x="70" y="1785" fill="#94a3b8" font-size="9">• Backups: Proxmox Backup Server (VMs) + Velero (K8s)</text>
+        <text x="70" y="1803" fill="#94a3b8" font-size="9">  + Datenbank-Dumps → MinIO</text>
+        <text x="70" y="1823" fill="#a78bfa" font-size="8">Regel: Cluster-State lokal (schnell) · Zustandsdaten auf dem Metro-Storage</text>
 
         <!-- Backup & Veeam -->
         <rect x="695" y="1595" width="625" height="235" rx="8" fill="#0f172a"/>
         <rect x="695" y="1595" width="625" height="235" rx="8" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
         <text x="715" y="1619" fill="white" font-size="11" font-weight="600">Backup &amp; Veeam</text>
-        <text x="715" y="1641" fill="#94a3b8" font-size="9">• Datenbanken, 3 Wege: (1) Ceph-Snapshots via Velero,</text>
-        <text x="715" y="1659" fill="#94a3b8" font-size="9">  (2) native Dumps (pg_dump/mysqldump) als CronJob → MinIO,</text>
-        <text x="715" y="1675" fill="#94a3b8" font-size="9">  (3) Replikation (Patroni) für Recovery-Ziele im Sekundenbereich</text>
+        <text x="715" y="1641" fill="#94a3b8" font-size="9">• Datenbanken, 3 Wege: (1) Array-Snapshots (Alletra) via Velero,</text>
+        <text x="715" y="1659" fill="#94a3b8" font-size="9">  (2) native Dumps (pg_dump) als CronJob → MinIO,</text>
+        <text x="715" y="1675" fill="#94a3b8" font-size="9">  (3) CloudNativePG-Backup (WAL/Barman) für Recovery im Sekundenbereich</text>
         <text x="715" y="1693" fill="#94a3b8" font-size="9">• VMs: Proxmox Backup Server (dedupliziert + verschlüsselt)</text>
         <text x="715" y="1711" fill="#94a3b8" font-size="9">• Kubernetes: Velero → MinIO (S3-kompatibel),</text>
         <text x="715" y="1727" fill="#94a3b8" font-size="9">  Cross-Datacenter-Restore</text>
@@ -549,7 +559,7 @@
         <text x="70" y="1932" fill="#34d399" font-size="9" class="mode-aktiv" style="display:none">• ClusterMesh: Active/Active umgesetzt — Locality-Routing, Replicas über beide Standorte, GSLB 50/50 (DB-Primary bleibt in A)</text>
         <text x="70" y="1950" fill="#94a3b8" font-size="9">• GitOps-SPOFs beseitigen: Harbor-Replikation nach Standort B · GitLab/ArgoCD/CAPI-Management-Cluster selbst DR-fähig · MinIO-Replikation</text>
         <text x="70" y="1968" fill="#94a3b8" font-size="9">• SSO/OIDC + MFA durchgängig (GitLab, ArgoCD, Harbor, Kubernetes-API, Proxmox) · Audit-Log-Retention ≥ 6–12 Monate · etcd-Snapshots sichern</text>
-        <text x="70" y="1986" fill="#fbbf24" font-size="8">Diese Punkte sind Doku-/Entscheidungsarbeit — kein Umbau der Grundarchitektur</text>
+        <text x="70" y="1986" fill="#fbbf24" font-size="8">Doku-/Entscheidungsarbeit — kein Umbau der Grundarchitektur · neu: QDevice-Standort festlegen + Corosync-Timeouts an gemessener Metro-Latenz tunen (failover.md §9)</text>
 
         <!-- ============ LEGEND (2 Zeilen) ============ -->
         <text x="80" y="2025" fill="white" font-size="11" font-weight="600">Legend</text>
@@ -561,7 +571,7 @@
         <text x="252" y="2044" fill="#94a3b8" font-size="8">Proxmox / Legacy-VMs</text>
 
         <rect x="400" y="2036" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
-        <text x="422" y="2044" fill="#94a3b8" font-size="8">Ceph / Storage</text>
+        <text x="422" y="2044" fill="#94a3b8" font-size="8">Storage (Alletra / Metro)</text>
 
         <rect x="540" y="2036" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
         <text x="562" y="2044" fill="#94a3b8" font-size="8">GitOps &amp; Plattform-Werkzeuge (K8s)</text>
@@ -570,7 +580,7 @@
         <text x="782" y="2044" fill="#94a3b8" font-size="8">Metro / HA / Redundanz</text>
 
         <rect x="940" y="2036" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
-        <text x="962" y="2044" fill="#94a3b8" font-size="8">IaC (Ansible)</text>
+        <text x="962" y="2044" fill="#94a3b8" font-size="8">IaC (OpenTofu)</text>
 
         <rect x="1090" y="2036" width="16" height="10" rx="2" fill="transparent" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,3"/>
         <text x="1112" y="2044" fill="#94a3b8" font-size="8">Standort-Boundary / Metro-Link</text>
@@ -592,7 +602,8 @@
           <li>• 2 Ressourcen-Pools (Datacenter A, Datacenter B)</li>
           <li>• Multi-100-Gb/s Metro-Link</li>
           <li>• Cisco ACI als L3-Transport</li>
-          <li>• Lokal: NVMe (Betriebssystem + etcd), NVMe/SSD als OSD</li>
+          <li>• Storage: <a href="https://www.hpe.com/de/de/storage/alletra-storage-mp.html" target="_blank">HPE Alletra MP B10000</a> (Block: iSCSI/FC/NVMe-oF) als Metro-Paar</li>
+          <li>• Lokal: NVMe für Betriebssystem + etcd (K8s-Cluster-State)</li>
         </ul>
       </div>
 
@@ -616,10 +627,11 @@
           <h3>Storage &amp; DR</h3>
         </div>
         <ul>
-          <li>• 2× <a href="https://ceph.io/" target="_blank">Ceph</a> (je Datacenter) + async Replikation (Patroni/RBD-Mirror)</li>
-          <li>• Metro-VMs als eigenes Cluster über beide Datacenter</li>
+          <li>• <a href="https://www.hpe.com/de/de/storage/alletra-storage-mp.html" target="_blank">HPE Alletra MP B10000</a> als Metro-Paar — 2 Systeme, Peer Persistence</li>
+          <li>• Gestreckter Proxmox-Cluster für VMs (Corosync + QDevice am 3. Standort)</li>
+          <li>• K8s-PVs via <a href="https://scod.hpedev.io/csi_driver/" target="_blank">HPE CSI Driver</a> · DB-Replikation <a href="https://cloudnative-pg.io/" target="_blank">CloudNativePG</a> (K8s) / Patroni (VM-DBs)</li>
           <li>• <a href="https://velero.io/" target="_blank">Velero</a> + <a href="https://www.proxmox.com/en/proxmox-backup-server" target="_blank">Proxmox Backup Server</a> + <a href="https://min.io/" target="_blank">MinIO</a></li>
-          <li>• etcd lokal auf NVMe (nie Ceph)</li>
+          <li>• etcd lokal auf NVMe (nie auf dem Metro-Storage)</li>
           <li>• Veeam wird durch Proxmox Backup Server + Velero ersetzt</li>
         </ul>
       </div>
@@ -627,7 +639,7 @@
 
     <!-- Footer -->
     <p class="footer">
-      KRITIS Zielarchitektur · Proxmox VE + Kubernetes (Talos/RKE2) + Cilium/Hubble + Ceph · GitOps für Cluster, Ansible für Infrastruktur · Links öffnen offizielle Seiten · Stand 2026-08
+      KRITIS Zielarchitektur · Proxmox VE + Kubernetes (Talos/RKE2) + Cilium/Hubble + HPE Alletra MP (Metro-Storage) · GitOps für Cluster, OpenTofu für Infrastruktur · Links öffnen offizielle Seiten · Stand 2026-10
     </p>
   </div>
   <script>
