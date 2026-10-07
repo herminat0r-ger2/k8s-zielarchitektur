@@ -7,7 +7,7 @@
 ## Inhaltsverzeichnis
 
 1. [Rahmenbedingungen des Setups](#1-rahmenbedingungen-des-setups)
-2. [Alle relevanten Proxmox Storage-Typen](#2-alle-relevanten-proxmox-storage-typen)
+2. [Alle relevanten Proxmox Storage-Typen](#2-alle-relevanten-proxmox-storage-typen) — inkl. [2.4 NVMe-oF im Detail](#24-nvme-of-im-detail--die-transporte)
 3. [Bewertungstabelle Enterprise-Stretched-Cluster](#3-bewertungstabelle-enterprise-stretched-cluster)
 4. [Detaillierte Analyse der relevanten Optionen](#4-detaillierte-analyse-der-relevanten-optionen)
 5. [Empfohlenes Architektur-Setup](#5-empfohlenes-architektur-setup)
@@ -40,7 +40,7 @@
 - ZFS (lokal + Replication)
 - iSCSI (+ LVM)
 - FC / SAS (native + LVM)
-- NVMe-oF (FC/TCP) + LVM
+- NVMe-oF + LVM — drei Transporte mit sehr unterschiedlichen Voraussetzungen: **NVMe/FC**, **NVMe/TCP** und **NVMe/RDMA**. Welche möglich sind, bestimmt die Array, nicht der Host → [2.4 NVMe-oF im Detail](#24-nvme-of-im-detail--die-transporte)
 - Ceph RBD
 - ZFS over iSCSI
 
@@ -57,6 +57,92 @@
 
 - **Proxmox Backup Server (PBS)** – nur für Backups, nicht für Live-VM-Disks
 
+### 2.4 NVMe-oF im Detail — die Transporte
+
+**Der entscheidende Punkt zuerst:** NVMe-oF ist *ein* Protokoll mit mehreren Transport-Bindings — welche man nutzen kann, entscheidet **die Array**, nicht der Host. Für die HPE Alletra Storage MP B10000 sind laut HPE-QuickSpecs **Fibre Channel, NVMe-oF/FC, NVMe-oF/TCP und iSCSI** dokumentiert. **NVMe/RDMA (RoCE) ist nicht dabei.** Die Wahl reduziert sich in diesem Setup also real auf **NVMe/FC vs. NVMe/TCP** (iSCSI als Fallback).
+
+#### 2.4.1 Die drei Transporte im Vergleich
+
+| | **NVMe/FC** | **NVMe/TCP** | **NVMe/RDMA** |
+|---|---|---|---|
+| Fabrik | Fibre Channel | Ethernet (TCP/IP) | RoCEv2 / InfiniBand |
+| Standard | NVMe-oF 1.0, FC-NVMe | NVMe-oF TCP (ab NVMe 1.4) | NVMe-oF 1.0 |
+| Host-Hardware | FC-HBA mit NVMe/FC-Firmware | normale NIC, kein RDMA nötig | RDMA-fähige NIC (RoCE/iWARP) |
+| Host-CPU-Last | niedrig (HBA offloadet) | höher (Kapselung im Host-Stack) | am niedrigsten |
+| Switch-Anforderung | FC-Switches + Zoning | bestehende Ethernet-Switches | **verlustfreies** Ethernet (PFC/ECN/DCB) |
+| MTU-Thema | keins (FC rahmt selbst) | relevant — Array kann 1280–9000 Byte | relevant (PFC) |
+| Multipath | nativ im Kernel | nativ im Kernel | nativ im Kernel |
+| Reifegrad | hoch (SAN-Welt, Zoning-/HBA-Tools) | jünger, aber produktionsreif | hoch, aber sehr tuning-intensiv |
+| **Auf der B10000?** | **ja** — 32/64 Gb, bis **12 Ports/Node** | **ja** — 10/25 GbE und 100 GbE, **0–2 Ports/Node** | **nein** |
+
+**Warum die Port-Zahlen zählen:** Die Alletra bietet FC bzw. NVMe/FC bis zu **12 Ports pro Node**, Ethernet (iSCSI oder NVMe/TCP) dagegen nur **0–2 Ports pro Node** (10/25 GbE bzw. 100 GbE). Für Dual-Fabric plus Pfadredundanz über viele Hosts ist die FC-Seite der Array also deutlich großzügiger; auf der Ethernet-Seite müssen die Pfade eingeteilt werden. (Zahlen sind modellabhängig — im QuickSpecs nachsehen.)
+
+**Entscheidungsregel:**
+
+- **NVMe/FC**, wenn ein FC-Fabric samt HBAs vorhanden ist oder beschafft wird: geringste Host-CPU-Last, die meisten Array-Ports, etabliertes Zoning und Management.
+- **NVMe/TCP**, wenn die Ethernet-Infrastruktur genutzt werden soll: kein FC-Switch, kein HBA, Kabel und VLANs wiederverwenden — dafür mehr Host-CPU, wenige Array-Ports und der Fallstrick aus 2.4.4.
+- **iSCSI**, wenn maximale Kompatibilität gefragt ist: ältester und ruhigster Stack, aber mehr Overhead und `dm-multipath` statt nativem Multipath.
+- **NVMe/RDMA** scheidet hier aus, weil die B10000 es nicht anbietet.
+
+#### 2.4.2 Harte Randbedingungen der B10000 (HPE-Implementation-Guide)
+
+| Regel | Konsequenz für die Planung |
+|---|---|
+| NVMe/TCP **kann** mit FC und/oder NVMe/FC **auf dem System** koexistieren | beide Welten auf einer Array möglich |
+| NVMe/TCP **kann NICHT mit NVMe/FC auf demselben Host** koexistieren | pro Host **einen** NVMe-oF-Transport wählen — nicht mischen |
+| NVMe/TCP und iSCSI können auf **derselben** Array koexistieren (zusätzliche Slots) | iSCSI als Zweitprotokoll möglich — pro Host aber nicht mischen |
+| Max. Sessions pro Array: **2048** (2 Nodes) / **4096** (4 Nodes) | Planungsgröße für die Host-Anzahl |
+| Ethernet-MTU: **1280–9000 Byte** | Jumbo Frames 9000 werden unterstützt |
+| Kein Boot from SAN, kein Direct Connect, kein DHCP | Boot-Volume bleibt lokal |
+| Auto-Negotiation wird nicht unterstützt | Switch-Port-Speed manuell fixieren, SFP-Speed muss passen |
+| Ethernet-Pause und PFC (DCBX) mit NVMe/TCP unterstützt | Lossless-Option vorhanden |
+| Ab ArcusOS 10.6: alle 10 Frontend-Ethernet-Ports einzeln als iSCSI **oder** NVMe/TCP konfigurierbar | flexiblere Port-Planung |
+
+#### 2.4.3 Einbindung in Proxmox VE
+
+Proxmox hat **keinen NVMe-oF-Storage-Typ in der GUI** — die Verbindung wird per CLI am Host aufgebaut, danach wird das Device als **LVM (shared)** eingetragen:
+
+```bash
+apt update && apt -y install nvme-cli
+modprobe nvme_tcp
+echo "nvme_tcp" > /etc/modules-load.d/nvme_tcp.conf     # RDMA: Modul nvme_rdma
+nvme discover -t tcp -a <array-ip> -s 4420
+nvme connect  -t tcp -n <nqn> -a <array-ip> -s 4420
+nvme list                       # -> /dev/nvmeXnY
+vgcreate <vg> /dev/nvmeXnY      # von EINEM Host
+# dann in der PVE-GUI: LVM-Storage, "Existing volume groups", Nodes wählen, "Shared" markieren
+```
+
+**Persistenz über Reboot:** Eintrag in `/etc/nvme/discovery.conf` + `systemctl enable nvmf-autoconnect.service` (Alternative: `nvme-stas` als Connection-Manager). Bei **NVMe/FC** genügt HBA-Zoning — kein `nvme connect` nötig.
+
+**Prüfen — die vier Befehle, die man im Fehlerfall braucht:**
+
+```bash
+nvme list              # Namespaces
+nvme list-subsys       # Pfade je Subsystem (Multipath-Status)
+nvme list -v           # NQN, NDSID, Controller, Pfad-Zustand
+dmesg | grep -i nvme   # z. B. "IDs don't match for shared namespace"
+```
+
+#### 2.4.4 Der Metro-Paar-Fallstrick (dokumentierter Vorfall mit genau dieser Architektur)
+
+⚠️ 
+Ein Proxmox-Forum-Fall (PVE 9.2, **zwei aktiv-aktiv gespiegelte HPE-Alletra-Arrays**, NVMe/TCP mit nativem Kernel-Multipath) beschreibt einen Fehler, der **exakt** zu einer Array mit zwei LUN-Klassen passt — wie sie hier geplant ist (*lokal-only* **und** *Metro* auf denselben Systemen):
+
+- **Symptom:** Nach einem Reboot waren einige shared Volumes auf **einem** Host nicht mehr sichtbar. Im `dmesg` stand *„IDs don't match for shared namespace"*, obwohl alle Subsysteme verbunden waren. `nvme disconnect all`, `nvme discover` und `nvme ns-rescan` halfen nicht.
+- **Ursache:** Das zum **Master** promovierte Array exponiert bei gespiegelten Volumes alle Pfade mit **seinem** NQN — genau damit Clients dasselbe Volume sehen, egal über welches Array sie zugreifen. Es exponierte dabei aber **auch die nicht gespiegelten Volumes** des Partner-Arrays, und die kamen von dort mit **deren** NQN → **identische NDSIDs, unterschiedliche NQNs** → der Kernel lehnt das Namespace ab.
+- **Konsequenz für die Planung:** Die beiden LUN-Klassen dürfen sich auf **Namespace-/Subsystem-Ebene** nicht in die Quere kommen:
+  - **Getrennte Ports/Port-Sets und Host-Gruppen** je Klasse — nicht alles über dieselben Ziel-Ports präsentieren.
+  - **Getrennte Host-NQNs** für die lokale und die Metro-Anbindung, damit der Host nicht zwei Subsysteme mit gleicher NDSID sieht.
+  - **Alternativ die Klassen trennen:** lokal-only über iSCSI/FC, Metro über NVMe-oF (oder umgekehrt) — die Kombination NVMe/TCP + iSCSI **auf der Array** ist laut HPE erlaubt, auf demselben **Host** nicht.
+  - Vor dem Produktivbetrieb **beide Klassen gleichzeitig** an einem Testhost hochziehen und `nvme list -v` prüfen, *bevor* die VMs umziehen.
+
+#### 2.4.5 Bewertung im Kontext dieses Setups
+
+- **NVMe/FC** ist die technisch stärkste Option: HBA-Offload, bis zu 12 Ports/Node auf der Array, hohe Reife. Preis: ein FC-Fabric muss da sein.
+- **NVMe/TCP** hat die niedrigste Einstiegshürde (vorhandenes Ethernet), kostet aber Host-CPU, ist auf der Array auf 0–2 Ethernet-Ports/Node begrenzt und trifft mit dem NQN-Fallstrick (2.4.4) genau die geplante Doppelnutzung der Arrays.
+- In der Bewertungstabelle unten sind beide deshalb **getrennt** geführt.
+
 ---
 
 ## 3. Bewertungstabelle Enterprise-Stretched-Cluster
@@ -68,7 +154,8 @@
 | Storage-Typ | Shared / Metro geeignet | Snapshots (Proxmox) | Performance | Komplexität | HA / Live-Migration | Resilienz bei Netzfehlern (Linux-VMs) | PBS-Integration | Gesamt-Eignung Enterprise Stretched | Empfehlung für dein Setup |
 |---|---|---|---|---|---|---|---|---|---|
 | **iSCSI + LVM (Thick)** | 10 (Alletra nativ) | 4–7 ¹ | 9 | 6 | 10 | **9–10** (Multipath) | 8 | **9.5** | **Primär empfohlen** |
-| **NVMe-oF (FC/TCP) + LVM** | 10 | 4–7 ¹ | **10** | 7 | 10 | **10** (natives Multipath) | 8 | **9.7** | **Beste Performance** |
+| **NVMe-oF/FC + LVM** | 10 | 4–7 ¹ | **10** | 6 | 10 | **10** (natives Multipath) | 8 | **9.7** | **Beste Performance** (HBA-Offload, bis 12 Ports/Node) |
+| **NVMe-oF/TCP + LVM** | 10 | 4–7 ¹ | 9.5 | **5** | 10 | **9.5** (natives Multipath) | 8 | **9.4** | Ohne FC-Fabric — Ethernet, mehr Host-CPU, 0–2 Ports/Node ³ |
 | **FC + LVM** | 10 | 4–7 ¹ | 9.5 | 6 | 10 | **9–10** | 8 | **9.5** | Sehr gut |
 | **NFS (Alletra File)** | 9 | 6–8 ² | 7–8 | **3** | 9 | 6–7 (weniger robust bei Path-Fail) | 9 | 7.5 | Gut für ISO/Templates |
 | **Ceph RBD** | 8 (eigene Stretch-Mode) | **10** | 8–9 | 8–9 | 10 | 8 (eigene Replikation) | 9 | 7–8 | Nur wenn Hyperconverged |
@@ -83,19 +170,24 @@
 
 - ¹ Mit neueren Proxmox-Versionen (Volume Chains / qcow2-on-LVM) besser; ansonsten Array-Snapshots (Alletra) nutzen.
 - ² qcow2 oder Array-seitige Snapshots.
+- ³ Nur 0–2 Ethernet-Host-Ports pro Node (10/25 GbE bzw. 100 GbE), mehr Host-CPU-Last als FC **und** der NQN-Fallstrick bei zwei LUN-Klassen auf denselben Arrays — siehe [2.4](#24-nvme-of-im-detail--die-transporte). **NVMe/RDMA (RoCE) bietet die B10000 nicht.**
 
 ---
 
 ## 4. Detaillierte Analyse der relevanten Optionen
 
-### 4.1 iSCSI / FC / NVMe-oF + LVM auf HPE Alletra B10000 (klare Empfehlung)
+### 4.1 NVMe-oF / FC / iSCSI + LVM auf HPE Alletra B10000 (klare Empfehlung)
 
-- Alletra als Metro-Cluster (Peer Persistence) präsentiert denselben LUN an beiden Standorten mit Transparent Failover.
-- Proxmox: LVM Volume Group auf dem Multipath-Device anlegen → als shared Storage markieren.
+- Alletra als Metro-Paar (Peer Persistence) präsentiert denselben LUN an beiden Standorten mit transparentem Failover.
+- **Transport bewusst wählen** — auf der B10000 stehen **NVMe/FC** und **NVMe/TCP**, **kein** NVMe/RDMA ([2.4](#24-nvme-of-im-detail--die-transporte)):
+  - **NVMe/FC** = technisch stärkste Variante (HBA-Offload, bis 12 Ports/Node, etabliertes Zoning) — braucht ein FC-Fabric.
+  - **NVMe/TCP** = nutzt die Ethernet-Infrastruktur, dafür Host-CPU-Last und nur 0–2 Ethernet-Ports/Node; bei zwei LUN-Klassen auf denselben Arrays ist der NQN-Fallstrick ([2.4.4](#244-der-metro-paar-fallstrick-dokumentierter-vorfall-mit-genau-dieser-architektur)) Pflicht-Prüfpunkt.
+  - **iSCSI/FC ohne NVMe** = gleichwertiger Fallback, wenn Kompatibilität wichtiger ist als Latenz.
+- Proxmox: Anbindung per CLI (`nvme-cli`, `nvme discover`/`connect`, [2.4.3](#243-einbindung-in-proxmox-ve)) → LVM-Volume-Group auf dem Multipath-Device → als **shared** markieren.
 
 **Resilienz Linux-VMs:**
 
-- Multipath (`dm-multipath` oder natives NVMe-Multipath) ist entscheidend.
+- Multipath ist entscheidend — bei NVMe-oF **nativ im Kernel** (`nvme_core.multipath=Y`), bei iSCSI/FC über `dm-multipath`.
 - Path-Failover < 1–2 s möglich.
 - Bei Site-Trennung übernimmt die verbleibende Site transparent (Quorum Witness der Alletra).
 - Linux-Gäste: `scsi_mod.scan=sync`, angepasste Queue-Timeouts, `nofail` in `fstab` falls Mounts, `multipath-tools` korrekt konfiguriert.
@@ -140,7 +232,7 @@
 
 | # | Ebene | Empfehlung |
 |---|---|---|
-| 1 | **Primär-VM-Storage** | HPE Alletra B10000 über **NVMe-oF (bevorzugt)** oder iSCSI/FC + LVM (shared) |
+| 1 | **Primär-VM-Storage** | HPE Alletra B10000 über **NVMe-oF** — Transport nach Fabric wählen ([2.4](#24-nvme-of-im-detail--die-transporte)): **NVMe/FC** bei vorhandenem SAN, sonst **NVMe/TCP**; iSCSI/FC + LVM als gleichwertiger Fallback. LVM auf dem Multipath-Device, als *shared* markiert |
 | 2 | **ISO / Templates / Snippets** | NFS von Alletra oder Directory auf einem der Nodes |
 | 3 | **Backup** | PBS (möglichst redundant an beiden Standorten oder mit PBS-Sync) |
 | 4 | **Optional** | Lokales ZFS/LVM-Thin für extrem latenzsensitive Workloads + ZFS-Replication oder PBS |
@@ -179,13 +271,7 @@ Kurz erklärt, was die im Dokument verwendeten Storage- und Cluster-Begriffe tec
 
 **Was es ist.** NVMe ist das Kommando-Protokoll für SSDs — nicht mehr SCSI, sondern für massiv parallele, latenzarme Zugriffe über PCIe gebaut (viele tiefe Queues statt einer). **NVMe-oF** nimmt genau dieses Protokoll und legt es über ein *Netzwerk* statt über PCIe. Für den Host sieht die entfernte SSD aus wie eine lokale NVMe-Namespace (`/dev/nvmeXnY`).
 
-**Transporte** (der Teil nach dem Schrägstrich):
-
-| Transport | Läuft über | Voraussetzung | Charakter |
-|---|---|---|---|
-| **NVMe/FC** | Fibre-Channel-Fabric | FC-NVMe-fähige HBAs/Ports (Gen 6/7) | Nutzt bestehende SAN-Verkabelung + Zoning, hohe Reife |
-| **NVMe/TCP** | Standard-Ethernet (10/25/40/100 GbE) | keine RDMA-Hardware | Einfachste Einführung; etwas mehr CPU-Overhead und Latenz als RDMA |
-| **NVMe/RDMA** | RoCEv2 (Ethernet) oder InfiniBand | **verlustfreies** Ethernet (PFC/ECN/DCB) | Niedrigste Latenz und CPU-Last, aber saubere QoS-Konfiguration nötig |
+**Transporte.** Das Suffix benennt den Transport: **NVMe/FC** (FC-Fabric, HBA-Offload, bis 12 Ports/Node), **NVMe/TCP** (Standard-Ethernet, mehr Host-CPU, 0–2 Ethernet-Ports/Node), **NVMe/RDMA** (RoCEv2/InfiniBand, verlustfreies Ethernet nötig — von der B10000 **nicht** angeboten). Vollständiger Vergleich, die HPE-Randbedingungen und der Metro-Paar-Fallstrick: [2.4](#24-nvme-of-im-detail--die-transporte).
 
 **Warum es im Dokument vorne steht.** Gegenüber iSCSI deutlich weniger Latenz und CPU-Overhead (kein SCSI-über-TCP-Stack) — und Multipath ist **im Kernel eingebaut**: wo iSCSI `dm-multipath` braucht, macht NVMe es selbst (`nvme_core.multipath=Y`; `nvme list-subsys` zeigt die Pfade, `nvme list -v` die Namespaces). Im Proxmox-Setup legt man die LVM-Volume-Group wieder auf das Multipath-Device und markiert den Storage als *shared*.
 
@@ -215,7 +301,7 @@ Kurz erklärt, was die im Dokument verwendeten Storage- und Cluster-Begriffe tec
 
 **Warum strikt getrennt von Storage und Live-Migration.** Die Doku ist hier unmissverständlich: *"Storage communication should never be on the same network as corosync!"* Corosync reagiert empfindlich auf Latenzspitzen. Ein Speicher-Burst oder eine laufende Migration im selben Netz verzögert die Heartbeats; laufen die Timeouts ab, gilt ein Node als **tot** → HA-Aktion/Fencing, obwohl die Hardware völlig gesund ist. Das ist ein selbstgebauter Ausfall durch geteilte Ressource.
 
-**Bezug zum Stretched Cluster.** Über einen Metro-Link ist die Corosync-Latenz (und PPS) der bestimmende Faktor — **nicht** die Node-Zahl: die Doku nennt kein hartes Limit, in Produktion sind > 50 Nodes dokumentiert. Bei Link-Flackern droht der fälschliche Ausschluss eines Standorts. Genau dieses Argument trägt in [`failover.md`](failover.md) §8 die Entscheidung **gegen** einen gestreckten Proxmox-Cluster.
+**Bezug zum Stretched Cluster.** Über einen Metro-Link ist die Corosync-Latenz (und PPS) der bestimmende Faktor — **nicht** die Node-Zahl: die Doku nennt kein hartes Limit, in Produktion sind > 50 Nodes dokumentiert. Bei Link-Flackern droht der fälschliche Ausschluss eines Standorts. Genau dieses Argument ist in [`failover.md`](failover.md) §8/§9 die Grundlage der **Auflagen** für den gestreckten Cluster: Latenz-Budget < 5 ms, gemessene Timeouts und der QDevice als dritte Stimme.
 
 **Zwei-Node-Konstellation.** Für verlässliches Quorum braucht es eine ungerade Stimmenzahl — bei 2 Nodes übernimmt das der **Corosync-QDevice** (3. Vote). Davon zu unterscheiden ist der **externe Witness** aus `failover.md`: keine Quorum-Stimme *innerhalb* eines Clusters, sondern eine eigenständige externe Instanz mit eigener Check-Logik über die getrennten Cluster.
 
