@@ -35,6 +35,60 @@ drei Proxmox-Cluster — je einer lokal in A und B (standorteigener Storage, kei
 
 ---
 
+## Design-Vorlage: Protokolle, Ports, CPGs, Host-Sets
+
+> Der Input für Phase 1–5. Sie setzt die **Port-Personas** und die Trennung der LUN-Klassen in eine konkrete Belegung um — und macht den NDSID/NQN-Fallstrick (Phase 4.2) **strukturell** unmöglich, weil sich die Klassen weder Transport noch Ziel-Ports noch Host-Identität teilen.
+
+**Grundprinzip:** *Eine Klasse = ein Protokoll = ein Port-Set = eine Host-Gruppe = eine eigene NQN/IQN = eine eigene CPG.* Dazu die entscheidende Beobachtung: **Jeder Host gehört genau einem Cluster an** — ein Node des standortlokalen Clusters braucht nur die LOCAL-LUNs, ein Node des gestreckten Clusters nur die METRO-LUNs. Damit braucht **kein Host zwei Protokolle**.
+
+### Variante 1 (bevorzugt): Protokoll-Split über die Port-Personas
+
+| | Klasse **LOCAL** (Clusters A / B) | Klasse **METRO** (gestreckter Cluster) |
+|---|---|---|
+| Protokoll | **iSCSI** | **NVMe/TCP** |
+| Array-Ports | 10/25GbE-HBA **Port 1+2** (ab Werk iSCSI) | 10/25GbE-HBA **Port 3+4** (ab Werk NVMe/TCP) |
+| Subnetz | eigenes Storage-Netz je Standort | eigenes Storage-Netz |
+| Host-Identität | **IQN** je Node (Cluster A bzw. B) | **NQN** je Node (gestreckter Cluster) |
+| Host-Set (Array A) | `HG-A-LOCAL` | `HG-A-METRO` (gestreckte Nodes an Standort A) |
+| Host-Set (Array B) | `HG-B-LOCAL` | `HG-B-METRO` (gestreckte Nodes an Standort B) |
+| CPG (Array A / B) | `CPG-LOCAL-A` / `CPG-LOCAL-B` | `CPG-METRO` (auf **beiden** Arrays) |
+| Volume-Namen | `A-local-vmstore-01`, `B-local-vmstore-01` | `metro-vmstore-01`, … |
+| Replikation | keine | Peer Persistence, RC-Gruppe **synchron** |
+| Proxmox-Storage | Typ `lvm`, **Shared**, `discard=on` | Typ `lvm`, **Shared**, `discard=on` |
+| Host-Pfade | `dm-multipath`, 2 Pfade über Port 1+2 | **nativer** NVMe-Multipath über Port 3+4 |
+
+**Metro in der Remote-Copy-Gruppe:** Die Metro-Volumes bilden **eine** RC-Gruppe (Modus synchron); die Host-Sets beider Standorte werden über die `admitrcopy*`-Befehle (`admitrcopyhost`, `admitrcopyvv`) aufgenommen. Nur so sehen die Nodes **beider** Standorte dasselbe Volume — jeweils über ihr **lokales** Array.
+
+*Warum das trägt:* iSCSI und NVMe/TCP dürfen auf derselben Array koexistieren (die Doku nennt ausdrücklich die zusätzliche Slot-Unterstützung), die Klassen laufen aber auf **getrennten Port-Personas**. Ein Host sieht damit nie zwei Subsysteme mit gleicher NDSID — per Konstruktion, nicht per Sorgfalt.
+
+### Variante 2 (Fallback): ein Protokoll für beide Klassen
+
+Wenn alles über dasselbe Protokoll laufen soll (z. B. NVMe/TCP durchgängig, oder iSCSI-only bei Bestückung mit dem 100GbE-2-Port-OCP, dessen beide Ports ab Werk iSCSI sind):
+
+| | LOCAL | METRO |
+|---|---|---|
+| Ports | Port-Set 1 (10/25GbE Port 1 bzw. 100GbE Port 1) | Port-Set 2 (10/25GbE Port 2 bzw. Port 3+4) |
+| VLAN / Subnetz | getrennt | getrennt |
+| Host-NQN / IQN | eigene Identität je Klasse | eigene Identität je Klasse |
+| Host-Set / CPG | getrennt | getrennt |
+
+- **NVMe/TCP für beide Klassen:** der NQN/NDSID-Fallstrick bleibt relevant → Trennung über Port-Set **und** Host-NQN ist Pflicht, nicht Kosmetik.
+- **iSCSI für beide Klassen:** das NDSID/NQN-Problem gibt es nicht (SCSI-Namespace) — die Trennung dient dann der Fehlerdomäne und der Host-Zuordnung.
+
+### Sitzungs-Budget nachrechnen
+
+- **256 Sessions pro Port** (von allen VLANs am Port gemeinsam genutzt), **3072 pro Array** (2 Nodes) / 6144 (4).
+- Daumenformel: `Nodes × Pfade pro Port × Reserve ≤ 256`. Beispiel: 12 Nodes × 2 Pfade = 24 → unkritisch.
+
+### Was hier nicht hingehört
+
+- **Kein ZFS** auf einem geteilten LUN (siehe [`storage.md`](storage.md) §4.4).
+- **Kein `lvmthin`** für die geteilte Klasse — Thin kommt aus der **CPG** (siehe [`storage.md`](storage.md) §2.5).
+- **Boot-Volumes nicht auf diese LUNs:** Boot bleibt lokal; über iSCSI und NVMe/TCP ist SAN-Boot ohnehin nicht unterstützt.
+- **PBS nicht auf den Metro-LUN** — eigenes Ziel pro Standort bzw. mit Sync.
+
+---
+
 ## Phase 1 — Alletra: Basis, Protokolle, Quorum
 
 ### 1.1 Firmware & Lizenzen
@@ -83,7 +137,7 @@ Pro Volume/Klasse. Thin ist auf der B10000 der **Default** (`tpvv`); Details in 
 - [ ] **Schwellen bewusst setzen** (`-usr_aw`/`-usr_al`): Überschreitung erzeugt die *Thin Provisioning Soft Threshold Reached* Check Condition — das ist die Frühwarnung, bevor der Pool volläuft.
 - [ ] Optional **Mindest-Allokationsgröße** (`-minalloc`, MB) — verhindert I/O-Verzögerungen durch Volumenwachstum; die Array alloziert dadurch bewusst mehr als gebraucht (`Tot_Rsvd` > `Used`).
 - [ ] Optional **Dedup + Kompression**: `createvv -reduce <cpg> <name> <size>`.
-- [ ] **Präsentieren** an die **richtige Host-Gruppe** — Kontrolle mit `showvlun` (Präsentation; HPE nennt den Export „VLUN") und `showhost`/`showhostset` (Definitionen).
+- [ ] **Präsentieren** an die **richtige Host-Gruppe** — Kontrolle mit `showvlun` (Präsentation; HPE nennt den Export „VLUN") sowie `showvv -s -host <host>` (Platzverbrauch je Host, gültige Kombination laut CLI-Referenz).
 - [ ] **Boot-Volume bleibt lokal** — das ist eine **Entwurfsentscheidung**, keine Array-Grenze: Über **FC** unterstützt die B10000 SAN-Boot (eigene Prozedur) und Direct Connect (bestimmte Adapter, ab 10.3.0), über **iSCSI und NVMe/TCP** ist beides ausdrücklich **nicht** unterstützt.
 - [ ] **CHAP** vorbereiten: uni- und bidirektional möglich, aber **nicht für Discovery-Sessions** — und NVMe/TCP-In-Band-Auth verlangt RHEL ≥ 9.4, also einen Kernel/`nvme-cli` mit In-Band-Auth (auf Proxmox/Debian vorher prüfen).
 
@@ -91,7 +145,7 @@ Pro Volume/Klasse. Thin ist auf der B10000 der **Default** (`tpvv`); Details in 
 
 - [ ] **Peer-Persistence-Paar** bilden: Remote-Copy-Gruppe mit den Metro-Volumes, Modus **synchron**.
 - [ ] **Quorum Witness** der Gruppe zuweisen (aus Phase 1.1).
-- [ ] Zustand prüfen: `showrcopy`, `showrcopy -d` — Gruppe **synchron/aktiv**, kein „stale"/„new" Volume.
+- [ ] Zustand prüfen: `showrcopy` (Status), `showrcopy -d` (detaillierter) und **`showrcopy -qw`** (Peer-Persistence-spezifische Zielkonfiguration) — Gruppe **synchron/aktiv**, kein „stale"/„new" Volume.
 - [ ] ⚠️ Kapazität auf **beiden** Arrays gleich planen — gespiegelte Volumes belegen auf beiden Seiten Platz.
 
 ---
@@ -108,6 +162,8 @@ Pro Volume/Klasse. Thin ist auf der B10000 der **Default** (`tpvv`); Details in 
 ### 3.2 Storage-Netz & Multipath
 
 - [ ] Dedizierte Storage-NICs/VLANs, MTU wie in Phase 1.2 (konsistent!), getrennt von Management und Corosync.
+- [ ] **Getrennte Subnetze je Pfad-Gruppe/Klasse** statt eines gemeinsamen Netzes — das ist die verbreitete Empfehlung der Storage-Hersteller und ersetzt den `arp_filter`-Workaround für mehrere NICs im selben Subnetz.
+- [ ] ⚠️ **Multipath statt Bonding.** Multipath ist netzwerk-agnostisch und der bevorzugte Weg; wenn gebondet wird, muss **beide Seiten** (Host und Array/Switch) identisch gebondet sein.
 - [ ] **iSCSI-Track:** `iscsid` aktiv; ⚠️ HPE-Empfehlung für Hosts mit **mehreren NICs im selben Subnetz**: `net.ipv4.conf.all.arp_filter=1`.
 - [ ] **NVMe/Track:** Modul laden und Multipath sicherstellen:
 
@@ -277,9 +333,35 @@ vgcreate vg_metro /dev/mapper/<mpath-device>
 
 ---
 
+## Anhang: CLI-Befehle und Belegstatus
+
+**Definition:** *belegt* = in der HPE-CLI-Referenz (`sd00002409`, Stand 10.5.50) mit eigener Befehlsseite dokumentiert; die Beispiele stimmen wörtlich mit den hier gezeigten Aufrufen überein.
+
+| Befehl | Zweck | Beleg | Status |
+|---|---|---|---|
+| `createvv -tpvv -usr_aw <n> -usr_al <n> <cpg> <name> <size>` | Thin-Volume mit Warn- und Limitschwelle | CLI-Ref `createvv` (Beispiel `createvv -tpvv -usr_aw 50 -usr_al 75 cpg1 tpvv1 10G`) | belegt |
+| `createvv -tpvv -minalloc <MB> …` | Mindest-Allokationsgröße | CLI-Ref `createvv` (Beispiel `… -minalloc 2048 …`) | belegt |
+| `createvv -reduce <cpg> <name> <size>` | Thin + Dedup + Kompression | CLI-Ref `createvv` (Beispiel `createvv -reduce cpg2 vv1 16g`) | belegt |
+| `showversion` | Software-/OS-Stand des Arrays | CLI-Ref `showversion` | belegt |
+| `showvv -s` (`-space`) | Platzverbrauch je Volume (Usr Used, %VSize, Tot_Rsvd, Snap) | CLI-Ref `showvv`; Beispielausgabe im RHEL-Implementation-Guide | belegt |
+| `showvv -s -host <host>` | dito, nach Host gefiltert | CLI-Ref `showvv` (Beispiel `showvv -s -p -prov tp* -host hname`) | belegt |
+| `showvlun` | Präsentationen (Export an Host/Host-Set) | CLI-Ref `showvlun` | belegt |
+| `showhost`, `showhostset` | Host-Definitionen und Host-Gruppen | CLI-Ref `showhost`, `showhostset` | belegt |
+| `showport` | Port-Zustand und Persona | CLI-Ref `showport` | belegt |
+| `showiscsisession` (`-d` = Detail) | iSCSI-Sessions am Array | iSCSI Quick Connect (RHEL-Implementation-Guide) | belegt |
+| `showrcopy` (`-d` = detaillierter) | Remote-Copy-/Peer-Persistence-Status | CLI-Ref `showrcopy` | belegt |
+| `showrcopy -qw` | Peer-Persistence-spezifische Zielkonfiguration | CLI-Ref `showrcopy`, Option `-qw` | belegt |
+| `admitrcopyhost`, `admitrcopyvv` | Host-Set bzw. Volume in die RC-Gruppe aufnehmen | CLI-Ref, Abschnitt *Admit Commands* (eigene Befehlsseiten) | belegt |
+
+Nicht in dieser Liste: Proxmox-, Linux- und HPE-**Host**-Befehle (`nvme`, `iscsiadm`, `multipath`, `pvesm`, `pvcreate`, `vgcreate` …) — sie sind an ihrer Stelle im Ablauf belegt.
+
+---
+
 ## Quellen
 
-- HPE Alletra Storage MP B10000 — CLI-Referenz (`createvv`, `showvv -s`, `showiscsisession`, `showrcopy`)
+- HPE Alletra Storage MP B10000 — **CLI-Referenz** (`sd00002409`): `createvv`, `showvv`, `showvlun`, `showhost`, `showhostset`, `showport`, `showrcopy`, `showversion` — jeder Aufruf einzeln geprüft (siehe Anhang)
+- HPE Alletra Storage MP B10000 — **Port-Limits** (`iSCSI`- und `NVMe/TCP target port limits and specifications`): Port-Personas, 256 Sessions/Port, 3072/6144 Sessions/Array, Boot-from-SAN/Direct-Connect-Status, DHCP/iSNS
+- Proxmox-Forum, Thread *„Please help with Proxmox VE 9 Cluster and Alletra B10000 Via iSCSI"* (Sep 2025) — Praxisbezug: mehrere Subnetze, Multipath vs. Bonding, `LVM over iSCSI`; mit Verweis auf die Blockbridge-Notiz zu LVM-Shared-Storage in Proxmox
 - HPE Alletra Storage MP B10000 — Implementation Guides (RHEL/Oracle Linux, SLES, VMware ESXi)
 - HPE Advisory **a00150116** — Deallocation (Unmap) Issues bei NVMe-Verbindungen, behoben in 10.5.50
 - Proxmox VE Admin Guide — Kapitel 7 *Storage* (Storage Types/Feature-Matrix, Thin Provisioning, Trim/Discard)

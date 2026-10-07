@@ -331,11 +331,13 @@ Ein Proxmox-Forum-Fall (PVE 9.2, **zwei aktiv-aktiv gespiegelte HPE-Alletra-Arra
 | 2 | **ISO / Templates / Snippets** | NFS von Alletra oder Directory auf einem der Nodes |
 | 3 | **Backup** | PBS (möglichst redundant an beiden Standorten oder mit PBS-Sync) |
 | 4 | **Optional** | Lokales ZFS/LVM-Thin für extrem latenzsensitive Workloads + ZFS-Replication oder PBS |
-| 5 | **Netzwerk** | • Dediziertes, redundantes Storage-Netz (Multipath / dual Fabric)<br>• Separates Corosync-Netz (idealerweise 2 Links)<br>• < 5 ms RTT ist grünes Licht |
+| 5 | **Netzwerk** | • Dediziertes, redundantes Storage-Netz (Multipath / dual Fabric)<br>• **Multipath statt Bonding** — Multipath ist netzwerk-agnostisch und der bevorzugte Weg; wird gebondet, muss **beide Seiten** identisch gebondet sein<br>• **Getrennte Subnetze** je Pfad-Gruppe bzw. LUN-Klasse (Hersteller-Praxis) — ersetzt den `arp_filter`-Workaround für mehrere NICs im selben Netz<br>• Separates Corosync-Netz (idealerweise 2 Links)<br>• < 5 ms RTT ist grünes Licht |
+
+> **Konkrete Belegung** — welche Klasse auf welchem Protokoll, welcher Port-Persona, mit welcher CPG und welchem Host-Set: siehe **Design-Vorlage** in [`checkliste-storage.md`](checkliste-storage.md).
 
 ---
 
-> **Umsetzung:** Die Abhakliste von der Erstinstallation der Arrays bis zur ersten VM — inklusive Protokoll-/Port-Setup, CPG- und TPVV-Anlage, lokale vs. Metro-LUN-Klasse, NVMe/TCP- und iSCSI-Settings, Shared-LVM, `discard`-Nachweis und Failover-Tests — steht in [`checkliste-storage.md`](checkliste-storage.md).
+> **Umsetzung:** Die Abhakliste von der Erstinstallation der Arrays bis zur ersten VM — inklusive **Design-Vorlage** (Protokolle, Port-Personas, CPGs, Host-Sets), Protokoll-/Port-Setup, CPG- und TPVV-Anlage, lokale vs. Metro-LUN-Klasse, NVMe/TCP- und iSCSI-Settings, Shared-LVM, `discard`-Nachweis und Failover-Tests — steht in [`checkliste-storage.md`](checkliste-storage.md).
 
 ## 6. Resilienz-Maßnahmen für Linux-VMs bei Netzwerkfehlern
 
