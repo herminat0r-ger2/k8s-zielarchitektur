@@ -48,7 +48,9 @@ drei Proxmox-Cluster — je einer lokal in A und B (standorteigener Storage, kei
 
 - [ ] FC: HBAs/Ports laut Support-Matrix (SPOCK), **Zoning** beidseitig (Single-Initiator/Single-Target), Fabric-Logins sichtbar (`showport`, Switch `zoneshow`).
 - [ ] Ethernet (iSCSI / NVMe/TCP): IPs je Array-Node, **VLAN-Tagging**, Gateway nur wenn nötig.
-- [ ] ⚠️ **MTU 1280–9000** auf der Array — und **identisch** auf Host-NIC, Switch und Array-Port setzen. Halb konfigurierte Jumbo Frames sind die häufigste stille Bremse.
+- [ ] ⚠️ **MTU: 1280–9000 Byte** laut Linux-Implementation-Guide (die ESXi-Anleitung nennt 1500 und 9000) — und **identisch** auf Host-NIC, Switch und Array-Port setzen. Halb konfigurierte Jumbo Frames sind die häufigste stille Bremse.
+- [ ] ⚠️ **Port-Personas prüfen:** ab Werk ist gemischt — 10/25GbE-4-Port-HBA = Port 1+2 **iSCSI**, Port 3+4 **NVMe/TCP**; 100GbE-2-Port-OCP = **2× iSCSI**. Ab 10.6 sind alle 10 Frontend-Ports einzeln als iSCSI **oder** NVMe/TCP konfigurierbar (vor 10.6 mit Reboot). Genau hier lässt sich die Trennung der LUN-Klassen **portscharf** umsetzen (Phase 4.2).
+- [ ] **DHCP/iSNS werden nicht unterstützt** → alle Storage-Ports fest adressieren.
 - [ ] ⚠️ **Auto-Negotiation wird nicht unterstützt** → Switch-Port-**Speed manuell fixieren**, SFP-Speed muss passen.
 - [ ] Optional: **PFC/DCBX** (Ethernet-Pause) für NVMe/TCP aktivieren.
 - [ ] Ab ArcusOS **10.6**: alle 10 Frontend-Ethernet-Ports einzeln als iSCSI **oder** NVMe/TCP konfigurierbar — Port-Aufteilung danach planen.
@@ -82,7 +84,8 @@ Pro Volume/Klasse. Thin ist auf der B10000 der **Default** (`tpvv`); Details in 
 - [ ] Optional **Mindest-Allokationsgröße** (`-minalloc`, MB) — verhindert I/O-Verzögerungen durch Volumenwachstum; die Array alloziert dadurch bewusst mehr als gebraucht (`Tot_Rsvd` > `Used`).
 - [ ] Optional **Dedup + Kompression**: `createvv -reduce <cpg> <name> <size>`.
 - [ ] **Präsentieren** an die **richtige Host-Gruppe** (`showvv -host`, `showvlun`).
-- [ ] ⚠️ **Kein Boot from SAN** über diese LUNs (laut HPE nicht unterstützt) → Boot-Volume bleibt lokal.
+- [ ] **Boot-Volume bleibt lokal** — das ist eine **Entwurfsentscheidung**, keine Array-Grenze: Über **FC** unterstützt die B10000 SAN-Boot (eigene Prozedur) und Direct Connect (bestimmte Adapter, ab 10.3.0), über **iSCSI und NVMe/TCP** ist beides ausdrücklich **nicht** unterstützt.
+- [ ] **CHAP** vorbereiten: uni- und bidirektional möglich, aber **nicht für Discovery-Sessions** — und NVMe/TCP-In-Band-Auth verlangt RHEL ≥ 9.4, also einen Kernel/`nvme-cli` mit In-Band-Auth (auf Proxmox/Debian vorher prüfen).
 
 ### 2.1 Metro-Klasse zusätzlich
 

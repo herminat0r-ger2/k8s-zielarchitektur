@@ -149,12 +149,14 @@ Drei Punkte, die dabei überraschen:
 | NVMe/TCP **kann** mit FC und/oder NVMe/FC **auf dem System** koexistieren | beide Welten auf einer Array möglich |
 | NVMe/TCP **kann NICHT mit NVMe/FC auf demselben Host** koexistieren | pro Host **einen** NVMe-oF-Transport wählen — nicht mischen |
 | NVMe/TCP und iSCSI können auf **derselben** Array koexistieren (zusätzliche Slots) | iSCSI als Zweitprotokoll möglich — pro Host aber nicht mischen |
-| Max. Sessions pro Array: **2048** (2 Nodes) / **4096** (4 Nodes) | Planungsgröße für die Host-Anzahl |
-| Ethernet-MTU: **1280–9000 Byte** | Jumbo Frames 9000 werden unterstützt |
-| Kein Boot from SAN, kein Direct Connect, kein DHCP | Boot-Volume bleibt lokal |
+| ⚠️ **Port-Personas sind ab Werk gemischt:** 10/25GbE-4-Port-HBA = Port 1+2 **iSCSI**, Port 3+4 **NVMe/TCP**; 100GbE-2-Port-OCP = 2× iSCSI. Ab **10.6** sind alle 10 Frontend-Ethernet-Ports einzeln als iSCSI **oder** NVMe/TCP konfigurierbar (vor 10.6 mit System-Reboot) | die Trennung der LUN-Klassen ist **portscharf** möglich — genau der Hebel für [4.1.2](#412-der-metro-paar-fallstrick) |
+| Max. Sessions pro Array: **3072** (2 Nodes) / **6144** (4 Nodes); **256 pro Port**, von allen VLANs auf dem Port gemeinsam genutzt | Planungsgröße — die früher genannten 2048/4096 sind der **alte** Stand vor der Erhöhung |
+| Ethernet-MTU: **1280–9000 Byte** (Linux-Guide); die ESXi-Anleitung nennt 1500 und 9000 als unterstützte Werte | Jumbo Frames 9000 möglich — end-to-end konsistent setzen |
+| ⚠️ **Boot from SAN und Direct Connect sind protokollabhängig** — über **FC ist beides unterstützt** (SAN-Boot mit eigener Prozedur im HPE-Guide; Direct Connect nur mit bestimmten Host-Adaptern ab 10.3.0, Punkt-zu-Punkt 16/32 Gbps), über **iSCSI und NVMe/TCP ist beides NICHT unterstützt** | Boot-Volumes dieser Architektur bleiben lokal — das ist eine **Entwurfsentscheidung**, keine Array-Grenze |
+| DHCP und iSNS werden nicht unterstützt | Storage-Ports fest adressieren |
 | Auto-Negotiation wird nicht unterstützt | Switch-Port-Speed manuell fixieren, SFP-Speed muss passen |
+| CHAP uni- **und** bidirektional unterstützt — **nicht für Discovery-Sessions**; NVMe/TCP-In-Band-Auth verlangt RHEL ≥ 9.4 (also einen Kernel/`nvme-cli` mit In-Band-Auth) | bei NVMe/TCP-CHAP die Host-Unterstützung vorher prüfen |
 | Ethernet-Pause und PFC (DCBX) mit NVMe/TCP unterstützt | Lossless-Option vorhanden |
-| Ab ArcusOS 10.6: alle 10 Frontend-Ethernet-Ports einzeln als iSCSI **oder** NVMe/TCP konfigurierbar | flexiblere Port-Planung |
 
 #### 2.4.3 Bewertung im Kontext dieses Setups
 - **NVMe/FC** ist die technisch stärkste Option: HBA-Offload, bis zu 12 Ports/Node auf der Array, hohe Reife. Preis: ein FC-Fabric muss da sein.
